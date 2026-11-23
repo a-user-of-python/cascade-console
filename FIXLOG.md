@@ -405,3 +405,12 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   archived into the same libCascadeKit.a, and the result is cached
   (actions/cache keyed by the pinned cascade-ios SHA + patch hash)
   so later runs skip it. OCCT sources remain unmodified.
+- CI fix 5 (Native-engine ubuntu job, run 45264281060): engine tests
+  passed in CI (90 mock / 100 OCCT), then test_sim.cpp failed to
+  compile on the runner's g++: uint32_t used without <cstdint>
+  (transitively included by this host's headers, not the runner's).
+  Added the include.
+- The push-triggered Build Mac runs keep ending "cancelled" with no
+  log (45264281197, 45273079290) while a workflow_dispatch run of the
+  same commit succeeds (45268038128); treated as a runner-side
+  cancellation, Mac is re-dispatched rather than code-changed.

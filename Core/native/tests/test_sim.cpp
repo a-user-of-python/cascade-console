@@ -29,6 +29,7 @@
 #include "ccsim_backend.h"
 #include "ccgeom.h"
 
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
