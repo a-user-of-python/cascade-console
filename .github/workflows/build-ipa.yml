@@ -62,11 +62,11 @@ jobs:
             -target CascadeKit \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath "$GITHUB_WORKSPACE/build/kitdd" \
+            SYMROOT="$GITHUB_WORKSPACE/build/kitroot" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
-          test -f "$GITHUB_WORKSPACE/build/kitdd/Build/Products/Release-iphoneos/libCascadeKit.a"
+          test -f "$GITHUB_WORKSPACE/build/kitroot/Release-iphoneos/libCascadeKit.a"
 
       - name: Build Layer-2 engine library (cc_interpreter + ccgeom_mc)
         run: |
@@ -110,7 +110,7 @@ jobs:
             SWIFT_ACTIVE_COMPILATION_CONDITIONS=CASCADE_NATIVE_ENGINE \
             SWIFT_INCLUDE_PATHS="$GITHUB_WORKSPACE/build/ccmodule" \
             HEADER_SEARCH_PATHS='$(inherited) '"$GITHUB_WORKSPACE/Core/native/include" \
-            OTHER_LDFLAGS='$(inherited) -L'"$GITHUB_WORKSPACE/build/kitdd/Build/Products/Release-iphoneos"' -L'"$GITHUB_WORKSPACE/build"' -lCascadeKit -lCascadeConsoleEngine -lc++'
+            OTHER_LDFLAGS='$(inherited) -L'"$GITHUB_WORKSPACE/build/kitroot/Release-iphoneos"' -L'"$GITHUB_WORKSPACE/build"' -lCascadeKit -lCascadeConsoleEngine -lc++'
 
       - name: Gate — bundle resources AND native engine in the binary
         run: |
