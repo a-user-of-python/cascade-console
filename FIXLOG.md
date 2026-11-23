@@ -167,3 +167,29 @@ TARGETED_DEVICE_FAMILY=2. Every working iOS project in this workspace
 configurations. Fix: added `SDKROOT = iphoneos;` to both target
 build configurations (Debug + Release). Xcode on the runner is
 26.6 (iphoneos26.5 SDK) — no Xcode-selection change was needed.
+
+### F6 — duplicate source filename ViewerBridge.swift (IPA run 45244550232)
+F5 worked (iOS destination resolved, build started) and Xcode then
+failed with: error: Filename "ViewerBridge.swift" used twice:
+'Apps/iPad/Sources/Viewer/ViewerBridge.swift' and
+'Shared/Viewer/Swift/ViewerBridge.swift' (in target 'CascadeConsole').
+Xcode requires unique source basenames per target. The iPad file
+contains only `PlaceholderViewerBridge` (its header already says the
+Shared file is the normative bridge), so the honest fix is a rename,
+not an exclusion: Apps/iPad/Sources/Viewer/ViewerBridge.swift ->
+PlaceholderViewerBridge.swift, with the pbxproj fileRef/buildFile
+entries (IDs FEED642D…, 64FF6FD3…) and Apps/iPad/README.md updated.
+The Shared ViewerBridge.swift is untouched.
+
+### F6 — duplicate source filename ViewerBridge.swift (IPA run 45244550232)
+F5 worked (iOS destination resolved, build started) and Xcode then
+failed with: error: Filename "ViewerBridge.swift" used twice:
+'Apps/iPad/Sources/Viewer/ViewerBridge.swift' and
+'Shared/Viewer/Swift/ViewerBridge.swift' (in target 'CascadeConsole').
+Xcode requires unique source basenames per target. The iPad file
+contains only `PlaceholderViewerBridge` (its header already says the
+Shared file is the normative bridge), so the honest fix is a rename,
+not an exclusion: Apps/iPad/Sources/Viewer/ViewerBridge.swift ->
+PlaceholderViewerBridge.swift, with the pbxproj fileRef/buildFile
+entries (IDs FEED642D…, 64FF6FD3…) and Apps/iPad/README.md updated.
+The Shared ViewerBridge.swift is untouched.

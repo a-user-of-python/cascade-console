@@ -108,7 +108,7 @@ stays reachable through the in-app browser afterwards.
   `SceneObjectItem`s and forwards them to the viewer bridge.
 
 ### Agent 5 — Metal viewer
-- `Viewer/ViewerBridge.swift` keeps only `PlaceholderViewerBridge`
+- `Viewer/PlaceholderViewerBridge.swift` keeps only `PlaceholderViewerBridge`
   (the normative protocol is Agent 5's `ViewerBridge` in
   `Shared/Viewer/Swift/ViewerBridge.swift`, implemented by
   `CascadeRenderer`): `displayObject(id:name:)`, `removeObject(id:)`,
