@@ -375,3 +375,10 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   100644) and the Native-engine ubuntu job failed with exit 126
   (Permission denied) on the v0.2 push. Workflows now invoke the
   scripts via `bash`, and pushes record mode 100755 for .sh files.
+- CI fix 2 (Native-engine ubuntu job, run 45253976985): distro OCCT
+  on the runner uses the renamed toolkits (TKDESTEP/TKDESTL) in the
+  multiarch dir /usr/lib/x86_64-linux-gnu; build_host.sh's rename
+  detection only looked in $OCCT_PREFIX/lib, so the link failed with
+  "cannot find -lTKSTEP / -lTKSTL". Detection in build_host.sh and
+  build_sim.sh now searches the multiarch dirs. (Local /usr has no
+  OCCT at all here, so this specific path is CI-verified only.)
