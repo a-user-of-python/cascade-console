@@ -414,3 +414,8 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   log (45264281197, 45273079290) while a workflow_dispatch run of the
   same commit succeeds (45268038128); treated as a runner-side
   cancellation, Mac is re-dispatched rather than code-changed.
+- CI fix 6 (Native-engine ubuntu job, run 45275978464): build_sim.sh's
+  mc-adapter compile check had the same unconditional
+  $HOME/workspace/cascade-port assumption as fix 3. Same conditional
+  treatment. (The sim tests themselves had already passed locally and
+  in the macOS job; the failing step was only this trailing check.)

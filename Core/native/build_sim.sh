@@ -72,11 +72,18 @@ $CXX $CXXFLAGS \
   -o build/test_sim_occt
 
 echo "== [3/3] mc adapter compile check (object only) =="
-$CXX $CXXFLAGS -c \
-  -I"$SIM/include" -I"$ENG/include" -I"$ENG/src" -I"$PORT/Facade" \
-  "$SIM/src/ccsim_backend_mc.cpp" \
-  -o build/ccsim_backend_mc.o
-echo "mc adapter: compiled OK"
+# Needs a cascade-port checkout; on CI runners the macOS job of
+# build-native-engine.yml performs this check against the pinned
+# cascade-ios fetch, so skip (loudly) when no checkout is present.
+if [ -f "$PORT/Facade/occt_facade.h" ]; then
+  $CXX $CXXFLAGS -c \
+    -I"$SIM/include" -I"$ENG/include" -I"$ENG/src" -I"$PORT/Facade" \
+    "$SIM/src/ccsim_backend_mc.cpp" \
+    -o build/ccsim_backend_mc.o
+  echo "mc adapter: compiled OK"
+else
+  echo "SKIP: no cascade-port checkout at $PORT (mc adapter check runs in the macOS CI job)"
+fi
 
 echo "== run: mock =="
 (cd results && ../build/test_sim_mock mock sim_results_mock.json)
