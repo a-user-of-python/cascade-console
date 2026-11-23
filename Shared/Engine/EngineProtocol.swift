@@ -74,3 +74,40 @@ public final class StubEngine: CascadeEngine {
     linked — see the user guide and docs/catalog/ for the full catalogue.
     """
 }
+
+// MARK: - View-data feed (v0.2)
+//
+// The bridge between a geometry engine and the Metal viewer. An engine
+// that can tessellate conforms to this; AppState, after any successful
+// command, pulls the full scene through it and loads the result into
+// the ViewerBridge (CascadeRenderer) via the CCM1 adapter in
+// Shared/Viewer/Swift/EngineMeshAdapter.swift. StubEngine deliberately
+// does NOT conform: with no core linked there is nothing to render,
+// and the viewer honestly stays empty.
+
+/// One tessellated object as returned by the native session's
+/// cc_view_data: positions only (the C API carries no normals or face
+/// groups; the CCM1 adapter derives flat normals and a single face
+/// group — see EngineMeshAdapter).
+public struct EngineViewObject: Equatable {
+    public var name: String
+    public var vertices: [Float]   // 3 * vertexCount, xyz positions
+    public var indices: [Int32]    // 3 * triangleCount
+    public var volume: Double
+    public var bbox: [Double]      // minX, minY, minZ, maxX, maxY, maxZ
+    public init(name: String, vertices: [Float], indices: [Int32],
+                volume: Double, bbox: [Double]) {
+        self.name = name
+        self.vertices = vertices
+        self.indices = indices
+        self.volume = volume
+        self.bbox = bbox
+    }
+}
+
+public protocol EngineViewDataProviding: AnyObject {
+    /// Session object names, in session order.
+    func objectNames() async -> [String]
+    /// Tessellation for one object, or every object when `name` is nil.
+    func viewData(name: String?) async -> [EngineViewObject]
+}

@@ -1,0 +1,11 @@
+// Bridging module for the Cascade Console Layer-2 C API.
+// The apps add this module map's directory to MODULEMAP_PATH (iPad) /
+// use it as the clang module for the CCascadeConsole target (Mac
+// SwiftPM), with cc_facade.h as the umbrella header. The Layer-1
+// mc_* header (occt_facade.h) is NOT exposed to Swift: Layer 2 is the
+// only Swift-facing native surface, exactly as FACADE.md specifies
+// (cc_borrow_shape is the deliberate escape hatch).
+module CCascadeConsole {
+    header "../include/cc_facade.h"
+    export *
+}

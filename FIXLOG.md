@@ -231,3 +231,80 @@ scope note (unchanged): a green IPA run means the app compiles and
 packages against the Swift StubEngine — the native OCCT Layer-2
 library does not exist yet, so modelling commands answer
 NOT_IMPLEMENTED on device until it is linked.
+
+---
+
+# v0.2 — CI coordinator pass, 2026-11-23
+
+## Integration of enginework/ into repo/
+- `Core/native/` ← engine's NativeEngine tree (interpreter, 3 backends,
+  mc_additions, tests, build_host.sh, module map). Build artifacts
+  (`Core/native/build/`) excluded.
+- `Shared/Engine/NativeEngine.swift` + iPad pbxproj entries (engine's
+  repo-copy changes), Mac Package.swift plan comment, new workflow
+  `.github/workflows/build-native-engine.yml` (cascade-ios fetch now
+  PINNED to 061875afb5384227db5f39cba81266cf889257a4).
+- Engine report preserved verbatim at `docs/ENGINE-REPORT.md`.
+- Host tests RE-RUN from the repo copy on this machine (not just
+  trusted): mock 84 pass / 0 fail / 2 skip; real OCCT 8.0.1
+  (conda-forge) 90 pass / 0 fail / 0 skip; ccgeom_mc.cpp compiles
+  against the real cascade-port facade header. Matches REPORT.md §3.
+
+## mc_additions caveat — CORRECTED during integration
+The delivered paste block in `Core/native/src/mc_additions.cpp`
+assumed the facade handle's `_impl` is a raw `TopoDS_Shape*` and an
+error helper named `setError()`. The REAL facade (cascade-ios
+061875af…) wraps a private `ShapeImpl { TopoDS_Shape shape; ... }`
+behind `shapeOf()`/`wrap()`, and its error helper is
+`fail(err, code, msg)`. Pasting the block verbatim would not have
+compiled (and a forced variant would have crashed at runtime).
+`Core/native/ci/patch_cascade_port.py` therefore injects corrected
+implementations (via shapeOf/wrap/fail, StlAPI_Writer include,
+TKDESTL is in the staged tree) into the ephemeral CI checkout of
+cascade-ios only; cascade-ios upstream and all OCCT sources are
+unmodified. The delivered mc_additions files stay in Core/native/src
+as the design record, with this caveat.
+
+## Viewer feed (v0.2 gate: the viewer must be FED)
+- `Shared/Engine/EngineProtocol.swift`: new `EngineViewObject` +
+  `EngineViewDataProviding` protocol. NativeEngine conforms (its
+  viewData now returns EngineViewObject); StubEngine deliberately
+  does not — no core, nothing rendered, honestly.
+- `Shared/Viewer/Swift/EngineMeshAdapter.swift` (new, in the iPad
+  target): EngineViewObject -> CCM1 bytes -> MeshBufferLoader ->
+  MeshObject. cc_view_data carries positions only, so the adapter
+  derives flat normals, unwelds per triangle corner, and emits one
+  face group per object — the honest consequence of the Layer-2 API;
+  smooth normals via mc_tessellate are a later upgrade. Going through
+  real CCM1 bytes means the shipped app exercises the exact contract
+  verify_tessellation.py proves (re-run here: CONTRACT VERIFIED,
+  mesh area error 0.016%).
+- iPad AppState: viewer type is now the real `CascadeRenderer`
+  (optional only for no-Metal devices); picks arrive via
+  ViewerBridgeDelegate; after every successful command
+  `refreshScene()` re-syncs the object list from the session and
+  loads tessellation into the renderer via ViewerBridge.loadMesh;
+  `view` commands also fit. Visibility/remove/clear go through
+  ViewerBridge commands with shape names as IDs.
+- ContentView now hosts the new `ViewportView` (CascadeViewer-
+  Representable + Fit/display-mode chips). ViewportPlaceholderView
+  and PlaceholderViewerBridge are DELETED (pbxproj entries removed /
+  renamed in place). App entry uses EngineFactory.makeEngine() and
+  CascadeRenderer(). App version bumped to 0.2 (build 2).
+- Mac: NOT wired in this pass — its AppState still uses its own
+  per-app engine/viewer types; the remaining step is the Shared
+  adaptation pass (INTEGRATION-NOTES (f)) described in
+  Apps/Mac/Package.swift. Mac v0.2 artifact remains the stub build.
+
+## Native link in CI (build-ipa.yml rewritten)
+Fetch cascade-ios @ 061875af…, patch its facade in-checkout, build
+CascadeKit via its gen_project.py, compile cc_interpreter.cpp +
+ccgeom_mc.cpp to libCascadeConsoleEngine.a for arm64/iOS, generate
+the CCascadeConsole module map, build the app with
+CASCADE_NATIVE_ENGINE + SWIFT_INCLUDE_PATHS + OTHER_LDFLAGS, then
+GATE on the shipped executable: nm must show _cc_execute,
+_cc_session_create, _mc_clone_shape; bundle must contain
+catalog.json, default.metallib and BOTH OCCT licence texts.
+
+## CI results
+<!-- filled in by the coordinator as runs complete -->

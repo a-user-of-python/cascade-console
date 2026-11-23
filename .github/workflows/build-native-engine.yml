@@ -1,0 +1,56 @@
+name: Native engine
+
+# Native Layer-2 engine gates on STANDARD free runners only.
+# Job 1 (ubuntu): the C++ interpreter + both host backends against the
+# distro OCCT (7.6.3) — proves the engine's language/session/geometry
+# behaviour end-to-end on real OCCT. (The same suite also passes
+# against OCCT 8.0.1 locally; see Core/native tests.)
+# Job 2 (macos): compile-check ONLY of the device backend adapter
+# (ccgeom_mc.cpp) against the real cascade-port facade header from the
+# cascade-ios repo. Linking CascadeKit + building the apps with
+# CASCADE_NATIVE_ENGINE defined is the NEXT step (see the engine
+# report); this job deliberately does not claim it.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Core/native/**"
+      - "Shared/Engine/**"
+      - ".github/workflows/build-native-engine.yml"
+
+jobs:
+  engine-host:
+    name: Native engine host tests (OCCT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OCCT development libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libocct-foundation-dev libocct-modeling-data-dev \
+            libocct-modeling-algorithms-dev libocct-data-exchange-dev
+      - name: Build + run engine tests (mock + OCCT backends)
+        run: |
+          cd Core/native
+          CC_OCCT_PREFIX=/usr ./build_host.sh
+
+  mc-adapter-compile:
+    name: Device backend adapter compile check
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch cascade-port facade (CascadeKit header)
+        uses: actions/checkout@v4
+        with:
+          repository: a-user-of-python/cascade-ios
+          ref: 061875afb5384227db5f39cba81266cf889257a4
+          path: cascade-port-src
+      - name: Compile ccgeom_mc.cpp against the real facade header
+        run: |
+          clang++ -std=c++17 -Wall -Wextra \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            -c Core/native/src/ccgeom_mc.cpp -o /tmp/ccgeom_mc.o
+          echo "ccgeom_mc.cpp compiles against cascade-port occt_facade.h"

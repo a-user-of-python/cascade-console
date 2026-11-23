@@ -11,13 +11,17 @@
 // ../../Shared/** (models, settings keys, engine protocol + StubEngine,
 // command history, viewer Swift + Shaders.metal), catalog.json and the
 // OCCT licence texts as Resources.
-// TODO (native Layer-2, does not exist yet): when cascade-port's OCCT
-// device library + Core/facade Layer-2 session library exist, link them
-// here (OTHER_LDFLAGS / library search path to the cascade-port build)
-// and swap StubEngine for the OCCT-backed CascadeEngine in
-// Sources/CascadeConsoleApp.swift. Until then this target builds and
-// runs against the Swift StubEngine, which answers NOT_IMPLEMENTED
-// (E5002 / CC-SYS-000) for modelling commands - the honest current state.
+// Native Layer-2 (v0.2): NativeEngine.swift is in this target's
+// Sources (Shared/Engine). It compiles ONLY when the build defines
+// CASCADE_NATIVE_ENGINE and links (a) the Layer-2 static library built
+// from Core/native/src/cc_interpreter.cpp + ccgeom_mc.cpp and
+// (b) CascadeKit (cascade-port mc_* facade over OCCT 8.0.1) plus the
+// two mc_additions functions. The CI workflow build-ipa.yml supplies
+// all of those as command-line build settings (module map, library
+// paths, compilation condition), so a plain local build of this
+// project still compiles the stub configuration: CASCADE_NATIVE_ENGINE
+// undefined, EngineFactory returns StubEngine, modelling commands
+// answer NOT_IMPLEMENTED (E5002 / CC-SYS-000) - the honest fallback.
 // !$*UTF8*$!
 {
 	archiveVersion = 1;
@@ -31,8 +35,7 @@
 		54D9FD24A38BFF0B7DB64CC8 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231870B807BB763715D62925 /* AppState.swift */; };
 		E9F30B3E49278C1D3FEBABDE /* ExampleScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D04909D81C630A396BC2EEC /* ExampleScript.swift */; };
 		064C0C022BED2239ACC507CF /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DADA8A7ACEB88BC83D56E72 /* FileStore.swift */; };
-		64FF6FD35A59989E73977F96 /* PlaceholderViewerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEED642D631F79192C05FE86 /* PlaceholderViewerBridge.swift */; };
-		13092A651A80BD3C5458D2EA /* ViewportPlaceholderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D67C66DB77B8C46C6CE05858 /* ViewportPlaceholderView.swift */; };
+		13092A651A80BD3C5458D2EA /* ViewportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D67C66DB77B8C46C6CE05858 /* ViewportView.swift */; };
 		421B05D570A58899A22DE859 /* ConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B6AA9A1520F335A6168D54 /* ConsoleView.swift */; };
 		80FF12993149F283914AA030 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1405B8BDBEA8BADDC2CC792 /* ContentView.swift */; };
 		9CF6A56E4B79E7D7252D3A3C /* FileBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EE8E0CA29413B891C44EF6 /* FileBrowserView.swift */; };
@@ -42,11 +45,13 @@
 		68B8018768BB4E4BB0C0A314 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52606AD54B5D233086AE504B /* WelcomeView.swift */; };
 		36D8F1638018DBF319BA075F /* CommandHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 580B7AA5BF4E97323DA6ACF4 /* CommandHistory.swift */; };
 		479A75783B61FAD45CB253A0 /* EngineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275CCF1F3AA70B80342B61C1 /* EngineProtocol.swift */; };
+		A25B513503A755778D249886 /* NativeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF8494DA29FB30B13E62814E /* NativeEngine.swift */; };
 		B75E6D6C17619AC39CAB1D1B /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E034BCF1E391B4C8D6CA64BD /* SharedModels.swift */; };
 		92535D1FFEB47A8C00AE20E0 /* SettingsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE3AD425C040A620ED8B2CCF /* SettingsKeys.swift */; };
 		9EB2739DB5B7C8148E819D04 /* Camera.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1F27660E7B12A208ABB425 /* Camera.swift */; };
 		CA56389D445433F9784790FA /* CascadeMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6113FE979560419DE4DA38C1 /* CascadeMetalView.swift */; };
 		4CA828D2029ED93F507E54CB /* MeshBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2832F9925C34934165BA92 /* MeshBuffer.swift */; };
+		90FD1C108B098E0BE134F790 /* EngineMeshAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98B633CEE57121D15B66A51 /* EngineMeshAdapter.swift */; };
 		B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E37E3031BB95344C6955ECEB /* Renderer.swift */; };
 		738671A8703034CAE1F7D60D /* SceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A541D50550CEACC7F3A9E026 /* SceneStore.swift */; };
 		461CDBA82AC4277FDB20D6E9 /* ViewCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */; };
@@ -65,8 +70,7 @@
 		231870B807BB763715D62925 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppState.swift"; sourceTree = "<group>"; };
 		8D04909D81C630A396BC2EEC /* ExampleScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExampleScript.swift"; sourceTree = "<group>"; };
 		2DADA8A7ACEB88BC83D56E72 /* FileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileStore.swift"; sourceTree = "<group>"; };
-		FEED642D631F79192C05FE86 /* PlaceholderViewerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlaceholderViewerBridge.swift"; sourceTree = "<group>"; };
-		D67C66DB77B8C46C6CE05858 /* ViewportPlaceholderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewportPlaceholderView.swift"; sourceTree = "<group>"; };
+		D67C66DB77B8C46C6CE05858 /* ViewportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewportView.swift"; sourceTree = "<group>"; };
 		A0B6AA9A1520F335A6168D54 /* ConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConsoleView.swift"; sourceTree = "<group>"; };
 		D1405B8BDBEA8BADDC2CC792 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView.swift"; sourceTree = "<group>"; };
 		D6EE8E0CA29413B891C44EF6 /* FileBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileBrowserView.swift"; sourceTree = "<group>"; };
@@ -76,11 +80,13 @@
 		52606AD54B5D233086AE504B /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WelcomeView.swift"; sourceTree = "<group>"; };
 		580B7AA5BF4E97323DA6ACF4 /* CommandHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandHistory.swift"; sourceTree = "<group>"; };
 		275CCF1F3AA70B80342B61C1 /* EngineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EngineProtocol.swift"; sourceTree = "<group>"; };
+		AF8494DA29FB30B13E62814E /* NativeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeEngine.swift"; sourceTree = "<group>"; };
 		E034BCF1E391B4C8D6CA64BD /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SharedModels.swift"; sourceTree = "<group>"; };
 		CE3AD425C040A620ED8B2CCF /* SettingsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsKeys.swift"; sourceTree = "<group>"; };
 		DE1F27660E7B12A208ABB425 /* Camera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Camera.swift"; sourceTree = "<group>"; };
 		6113FE979560419DE4DA38C1 /* CascadeMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CascadeMetalView.swift"; sourceTree = "<group>"; };
 		FB2832F9925C34934165BA92 /* MeshBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeshBuffer.swift"; sourceTree = "<group>"; };
+		E98B633CEE57121D15B66A51 /* EngineMeshAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EngineMeshAdapter.swift"; sourceTree = "<group>"; };
 		E37E3031BB95344C6955ECEB /* Renderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Renderer.swift"; sourceTree = "<group>"; };
 		A541D50550CEACC7F3A9E026 /* SceneStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SceneStore.swift"; sourceTree = "<group>"; };
 		80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewCommands.swift"; sourceTree = "<group>"; };
@@ -124,8 +130,7 @@
 		C06EE5068A62C49E437DE99D /* Viewer */ = {
 			isa = PBXGroup;
 			children = (
-				FEED642D631F79192C05FE86 /* PlaceholderViewerBridge.swift */,
-				D67C66DB77B8C46C6CE05858 /* ViewportPlaceholderView.swift */,
+				D67C66DB77B8C46C6CE05858 /* ViewportView.swift */,
 			);
 			path = "Viewer";
 			sourceTree = "<group>";
@@ -177,6 +182,7 @@
 			isa = PBXGroup;
 			children = (
 				275CCF1F3AA70B80342B61C1 /* EngineProtocol.swift */,
+				AF8494DA29FB30B13E62814E /* NativeEngine.swift */,
 			);
 			path = "Engine";
 			sourceTree = "<group>";
@@ -211,6 +217,7 @@
 				DE1F27660E7B12A208ABB425 /* Camera.swift */,
 				6113FE979560419DE4DA38C1 /* CascadeMetalView.swift */,
 				FB2832F9925C34934165BA92 /* MeshBuffer.swift */,
+				E98B633CEE57121D15B66A51 /* EngineMeshAdapter.swift */,
 				E37E3031BB95344C6955ECEB /* Renderer.swift */,
 				A541D50550CEACC7F3A9E026 /* SceneStore.swift */,
 				80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */,
@@ -355,8 +362,7 @@
 				54D9FD24A38BFF0B7DB64CC8 /* AppState.swift in Sources */,
 				E9F30B3E49278C1D3FEBABDE /* ExampleScript.swift in Sources */,
 				064C0C022BED2239ACC507CF /* FileStore.swift in Sources */,
-				64FF6FD35A59989E73977F96 /* PlaceholderViewerBridge.swift in Sources */,
-				13092A651A80BD3C5458D2EA /* ViewportPlaceholderView.swift in Sources */,
+				13092A651A80BD3C5458D2EA /* ViewportView.swift in Sources */,
 				421B05D570A58899A22DE859 /* ConsoleView.swift in Sources */,
 				80FF12993149F283914AA030 /* ContentView.swift in Sources */,
 				9CF6A56E4B79E7D7252D3A3C /* FileBrowserView.swift in Sources */,
@@ -366,11 +372,13 @@
 				68B8018768BB4E4BB0C0A314 /* WelcomeView.swift in Sources */,
 				36D8F1638018DBF319BA075F /* CommandHistory.swift in Sources */,
 				479A75783B61FAD45CB253A0 /* EngineProtocol.swift in Sources */,
+				A25B513503A755778D249886 /* NativeEngine.swift in Sources */,
 				B75E6D6C17619AC39CAB1D1B /* SharedModels.swift in Sources */,
 				92535D1FFEB47A8C00AE20E0 /* SettingsKeys.swift in Sources */,
 				9EB2739DB5B7C8148E819D04 /* Camera.swift in Sources */,
 				CA56389D445433F9784790FA /* CascadeMetalView.swift in Sources */,
 				4CA828D2029ED93F507E54CB /* MeshBuffer.swift in Sources */,
+				90FD1C108B098E0BE134F790 /* EngineMeshAdapter.swift in Sources */,
 				B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */,
 				738671A8703034CAE1F7D60D /* SceneStore.swift in Sources */,
 				461CDBA82AC4277FDB20D6E9 /* ViewCommands.swift in Sources */,
@@ -434,7 +442,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -444,7 +452,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -457,7 +465,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -467,7 +475,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

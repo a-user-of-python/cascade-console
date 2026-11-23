@@ -39,3 +39,18 @@ let package = Package(
         )
     ]
 )
+
+// MARK: - Native engine (ENGINE agent, 2026-11-23)
+// The Mac target does NOT gain a native-engine target in this pass, for
+// the structural reason already recorded above: this target carries its
+// own per-app EngineProtocol/StubConsoleEngine types, and the Shared
+// adaptation pass (INTEGRATION-NOTES resolution (f)) has not landed.
+// Adding Shared/Engine/NativeEngine.swift now would duplicate those
+// types in one module and break the build. When the adaptation lands:
+//   1. add a SwiftPM target:
+//        .target(name: "CCascadeConsole", path: "../../NativeEngine/swiftpm")
+//      wrapping module.modulemap + cc_facade.h (see enginework),
+//   2. compile cc_interpreter.cpp + ccgeom_mc.cpp into a static library
+//      in CI alongside CascadeKit and link both,
+//   3. define CASCADE_NATIVE_ENGINE for the app target and call
+//      EngineFactory.makeEngine() from AppState.

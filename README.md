@@ -30,15 +30,27 @@ specified in `docs/EXTRAS.md`, with host-prototype numbers in
 
 ## Honest status
 
-This repository is the **integrated scaffold**: UI shells for both
-platforms, the shared Metal viewer, a host-proven Python reference
-implementation of the command interpreter (47/47 tests passing over
-real OCCT), and the C façade design the native session layer will
-implement. The native C++ session interpreter and the expanded OCCT
-device build are **not yet built** — see `INTEGRATION-NOTES.md` for
-exactly what remains before a device build can succeed. Do not expect
-the downloads below to produce a working CAD app until that work
-lands; the workflows exist so the build is exercised from day one.
+**v0.2 (2026-11-23): the native engine is linked into the iPad
+build.** The C++ Layer-2 session interpreter (`Core/native/`, a port
+of the host-proven Python reference — 90/90 host tests on real OCCT
+8.0.1 and 7.6.3) is compiled in CI against CascadeKit (the
+cascade-port `mc_*` façade over OCCT 8.0.1, fetched at a pinned
+commit), and the iPad app is built with `CASCADE_NATIVE_ENGINE`
+defined so `EngineFactory` returns the native engine. The CI gate
+proves it from the shipped binary itself (native symbols must be
+present in the executable). The 24 prototype-proven commands
+(primitives, booleans, fillet/chamfer, transforms, measure, STEP/STL
+export, undo/redo, sessions) run on device; the remaining catalog
+commands still answer honestly (E1002/E5002) until their Layer-2
+dispatch lands. After every successful command the app pulls the
+session tessellation (`cc_view_data`) through the CCM1 contract into
+the real Metal viewer. The **Mac app remains on the stub engine**
+for now: its target still carries its own per-app engine types and
+the Shared adaptation pass (INTEGRATION-NOTES resolution (f)) has
+not landed — the exact remaining steps are recorded in
+`Apps/Mac/Package.swift`. Device verdict (install + run on a real
+iPad) is still the user's to give; see `docs/ENGINE-REPORT.md` and
+`FIXLOG.md` for the full v0.2 record.
 
 ## Repository layout
 

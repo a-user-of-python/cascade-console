@@ -4,11 +4,14 @@ import SwiftUI
 /// on first launch, and applies the appearance setting. No force
 /// unwraps and no throwing calls on any launch path.
 ///
-/// LINKING THE REAL CORE (Agent 2): replace `StubEngine()` below with
-/// the OCCT-backed implementation of the Shared `CascadeEngine`
-/// protocol (Shared/Engine/EngineProtocol.swift).
-/// LINKING THE REAL VIEWER (Agent 5): swap `PlaceholderViewerBridge`
-/// for `CascadeRenderer` (Shared/Viewer) here and in AppState together.
+/// ENGINE (v0.2): EngineFactory.makeEngine() is the single switch
+/// point — NativeEngine (OCCT Layer-2) when the build defines
+/// CASCADE_NATIVE_ENGINE and links CascadeKit + libCascadeConsoleEngine
+/// (see .github/workflows/build-ipa.yml), the honest StubEngine
+/// otherwise.
+/// VIEWER (v0.2): the real CascadeRenderer (Shared/Viewer) is created
+/// here and fed by AppState's viewer feed; it is nil only on a device
+/// with no Metal device, which the viewport reports honestly.
 @main
 struct CascadeConsoleApp: App {
     @StateObject private var state: AppState
@@ -16,9 +19,9 @@ struct CascadeConsoleApp: App {
 
     init() {
         let fileStore = FileStore()
-        let viewer = PlaceholderViewerBridge()
+        let viewer = CascadeRenderer()
         let appState = AppState(
-            engine: StubEngine(),
+            engine: EngineFactory.makeEngine(),
             viewer: viewer,
             fileStore: fileStore)
         _state = StateObject(wrappedValue: appState)

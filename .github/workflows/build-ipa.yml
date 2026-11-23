@@ -1,33 +1,101 @@
 name: Build iPad IPA
 
 # Unsigned iPad build on a STANDARD free runner only (macos-26).
-# The Xcode project now exists: Apps/iPad/CascadeConsole.xcodeproj,
-# scheme "CascadeConsole" (shared scheme in xcshareddata), target
-# CascadeConsole, bundle id com.user.cascadeconsole, iPad only,
-# deployment target iOS 17.0. It builds against the Swift StubEngine
-# in Shared/Engine — the native OCCT Layer-2 library does not exist
-# yet (see the TODO header in project.pbxproj), so a green run means
-# "the app compiles and packages", NOT "CAD commands work on device".
-# Any build failure fails this job — nothing here masks errors
-# (no continue-on-error, no `|| true`).
+#
+# v0.2 — NATIVE ENGINE LINKED. Steps:
+#   1. Fetch a-user-of-python/cascade-ios at the pinned commit below
+#      (the cascade-port OCCT 8.0.1 subset + mc_* facade = CascadeKit).
+#      CI fetch, NOT vendoring/submodule — see docs/ENGINE-REPORT.md §4.
+#   2. Inject mc_clone_shape + mc_export_stl into the CHECKOUT's facade
+#      (Core/native/ci/patch_cascade_port.py; cascade-ios itself and
+#      all OCCT sources stay unmodified — LGPL).
+#   3. Build CascadeKit (libCascadeKit.a) from that checkout.
+#   4. Compile the Layer-2 interpreter (Core/native/src/cc_interpreter
+#      .cpp + ccgeom_mc.cpp) into libCascadeConsoleEngine.a.
+#   5. Build the app with CASCADE_NATIVE_ENGINE defined, the
+#      CCascadeConsole module map on SWIFT_INCLUDE_PATHS, and both
+#      libraries on the link line — EngineFactory.makeEngine() then
+#      returns NativeEngine in the shipped binary.
+#   6. GATE: the shipped executable must contain the native symbols
+#      (cc_execute / cc_session_create / mc_clone_shape) and the bundle
+#      must carry catalog.json, default.metallib and BOTH OCCT licence
+#      texts. A build that silently fell back to the stub fails here.
+# Any failure fails this job — nothing masks errors.
 
 on:
   workflow_dispatch:
   push:
 
+env:
+  CASCADE_IOS_SHA: 061875afb5384227db5f39cba81266cf889257a4
+
 jobs:
   build:
-    name: Cascade Console unsigned IPA
+    name: Cascade Console unsigned IPA (native engine)
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fetch cascade-port (CascadeKit) at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: a-user-of-python/cascade-ios
+          ref: ${{ env.CASCADE_IOS_SHA }}
+          path: cascade-port-src
+
+      - name: Inject mc_additions into the cascade-port checkout
+        run: python3 Core/native/ci/patch_cascade_port.py cascade-port-src
+
       - name: Verify project and scheme exist
         run: |
           test -f Apps/iPad/CascadeConsole.xcodeproj/project.pbxproj
           test -f Apps/iPad/CascadeConsole.xcodeproj/xcshareddata/xcschemes/CascadeConsole.xcscheme
           test -f Shared/Resources/catalog.json
           xcodebuild -list -project Apps/iPad/CascadeConsole.xcodeproj
-      - name: Build CascadeConsole (unsigned)
+
+      - name: Build CascadeKit (OCCT + mc_* facade)
+        run: |
+          cd cascade-port-src
+          python3 gen_project.py
+          xcodebuild build \
+            -project CascadePort.xcodeproj \
+            -target CascadeKit \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$GITHUB_WORKSPACE/build/kitdd" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+          test -f "$GITHUB_WORKSPACE/build/kitdd/Build/Products/Release-iphoneos/libCascadeKit.a"
+
+      - name: Build Layer-2 engine library (cc_interpreter + ccgeom_mc)
+        run: |
+          SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
+          mkdir -p build
+          for src in cc_interpreter ccgeom_mc; do
+            clang++ -std=c++17 -O2 \
+              -target arm64-apple-ios17.0 \
+              -isysroot "$SDK_PATH" \
+              -ICore/native/include -ICore/native/src \
+              -Icascade-port-src/Facade \
+              -c "Core/native/src/$src.cpp" -o "build/$src.o"
+          done
+          ar rcs build/libCascadeConsoleEngine.a build/cc_interpreter.o build/ccgeom_mc.o
+          echo "Layer-2 symbols in libCascadeConsoleEngine.a:"
+          nm build/libCascadeConsoleEngine.a | grep -E "cc_execute|mc_clone_shape" || true
+
+      - name: Write CCascadeConsole module map
+        run: |
+          mkdir -p build/ccmodule
+          cat > build/ccmodule/module.modulemap <<EOF
+          module CCascadeConsole {
+              header "$GITHUB_WORKSPACE/Core/native/include/cc_facade.h"
+              export *
+          }
+          EOF
+          cat build/ccmodule/module.modulemap
+
+      - name: Build CascadeConsole (unsigned, native engine)
         run: |
           xcodebuild build \
             -project Apps/iPad/CascadeConsole.xcodeproj \
@@ -38,14 +106,28 @@ jobs:
             -derivedDataPath build/dd \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
-      - name: Verify the app bundle carries its resources
+            CODE_SIGN_IDENTITY="" \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS=CASCADE_NATIVE_ENGINE \
+            SWIFT_INCLUDE_PATHS="$GITHUB_WORKSPACE/build/ccmodule" \
+            HEADER_SEARCH_PATHS='$(inherited) '"$GITHUB_WORKSPACE/Core/native/include" \
+            OTHER_LDFLAGS='$(inherited) -L'"$GITHUB_WORKSPACE/build/kitdd/Build/Products/Release-iphoneos"' -L'"$GITHUB_WORKSPACE/build"' -lCascadeKit -lCascadeConsoleEngine -lc++'
+
+      - name: Gate — bundle resources AND native engine in the binary
         run: |
           APP_PATH="build/dd/Build/Products/Release-iphoneos/CascadeConsole.app"
           test -d "$APP_PATH"
           test -f "$APP_PATH/catalog.json"
           test -f "$APP_PATH/default.metallib"
           test -f "$APP_PATH/OCCT-LGPL-2.1.txt"
+          test -f "$APP_PATH/OCCT-LGPL-EXCEPTION.txt"
+          BIN="$APP_PATH/CascadeConsole"
+          echo "Native-engine symbols in the shipped executable:"
+          xcrun nm "$BIN" | grep -E "_cc_execute$|_cc_session_create$|_mc_clone_shape$|_mc_export_stl$"
+          xcrun nm "$BIN" | grep -qE " _cc_execute$"
+          xcrun nm "$BIN" | grep -qE " _cc_session_create$"
+          xcrun nm "$BIN" | grep -qE " _mc_clone_shape$"
+          echo "GATE PASS: native engine is linked into the shipped binary"
+
       - name: Package IPA
         run: |
           APP_PATH="build/dd/Build/Products/Release-iphoneos/CascadeConsole.app"
@@ -54,6 +136,7 @@ jobs:
           cp -R "$APP_PATH" Payload/
           zip -qry CascadeConsole-unsigned.ipa Payload
           ls -lh CascadeConsole-unsigned.ipa
+
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:

@@ -16,25 +16,25 @@ final class AppState: ObservableObject {
     @Published var isRunning: Bool = false
 
     let engine: CascadeEngine
-    let viewer: PlaceholderViewerBridge
+    /// The real Metal viewer (Shared/Viewer). Optional only because a
+    /// device with no Metal device cannot create one; on any such
+    /// device the viewport shows an honest message instead of a crash
+    /// (the app entry point passes CascadeRenderer() straight through).
+    let renderer: CascadeRenderer?
+    var viewer: ViewerBridge? { renderer }
     let fileStore: FileStore
 
     private var history: [String] = []
     private var historyIndex: Int?
 
     init(engine: CascadeEngine,
-         viewer: PlaceholderViewerBridge,
+         viewer: CascadeRenderer?,
          fileStore: FileStore) {
         self.engine = engine
-        self.viewer = viewer
+        self.renderer = viewer
         self.fileStore = fileStore
 
-        viewer.onObjectPicked = { [weak self] picked in
-            guard let self else { return }
-            if let match = self.objects.first(where: { $0.id.uuidString == picked }) {
-                self.selectedObjectID = match.id
-            }
-        }
+        renderer?.delegate = self
 
         appendLog(.info, "Cascade Console ready. Type 'help' and press Return.")
     }
@@ -106,6 +106,9 @@ final class AppState: ObservableObject {
         Task { @MainActor in
             let result = await engine.execute(command: command)
             apply(result)
+            if !result.isError {
+                await refreshScene(fit: verb == "view")
+            }
             isRunning = false
         }
     }
@@ -127,11 +130,58 @@ final class AppState: ObservableObject {
         }
         // Shared CommandResult carries session names only; in the
         // Layer-2 design the session name IS the shape handle (shapeID).
-        for name in result.producedNames {
+        for name in result.producedNames where !objects.contains(where: { $0.shapeID == name }) {
             let item = SceneObjectItem(shapeID: name, name: name)
             objects.append(item)
-            viewer.displayObject(id: item.id, name: item.name)
             selectedObjectID = item.id
+        }
+    }
+
+    // MARK: - Viewer feed (v0.2)
+    //
+    // After every successful command, pull the session's tessellation
+    // from the engine (cc_view_data via EngineViewDataProviding),
+    // convert it through the CCM1 adapter, and load it into the real
+    // Metal renderer through the normative ViewerBridge. The object
+    // list is re-synced from the session at the same time, so deletes,
+    // renames and undo are all reflected without the console guessing.
+    // Engines that cannot tessellate (StubEngine) do not conform, and
+    // the viewer honestly stays empty.
+
+    @MainActor
+    func refreshScene(fit: Bool) async {
+        guard let provider = engine as? EngineViewDataProviding,
+              let renderer else { return }
+        let names = await provider.objectNames()
+        let viewObjects = await provider.viewData(name: nil)
+
+        let nameSet = Set(names)
+        objects.removeAll { !nameSet.contains($0.shapeID) }
+        for name in names where !objects.contains(where: { $0.shapeID == name }) {
+            objects.append(SceneObjectItem(shapeID: name, name: name))
+        }
+        if let selectedObjectID,
+           !objects.contains(where: { $0.id == selectedObjectID }) {
+            self.selectedObjectID = nil
+        }
+
+        do {
+            let meshes = try EngineMeshAdapter.meshObjects(from: viewObjects)
+            let liveIDs = Set(meshes.map { $0.id })
+            for stale in renderer.objectIDs where !liveIDs.contains(stale) {
+                renderer.removeObject(id: stale)
+            }
+            for mesh in meshes {
+                let visible = objects.first(where: { $0.shapeID == mesh.id })?.isVisible ?? true
+                var props = ObjectDisplayProps()
+                props.isVisible = visible
+                renderer.loadMesh(mesh, props: props)
+            }
+            if fit && !meshes.isEmpty {
+                renderer.apply(.fit)
+            }
+        } catch {
+            appendLog(.error, "Viewer feed failed: \(error)")
         }
     }
 
@@ -141,16 +191,12 @@ final class AppState: ObservableObject {
         guard let index = objects.firstIndex(where: { $0.id == item.id })
         else { return }
         objects[index].isVisible.toggle()
-        if objects[index].isVisible {
-            viewer.displayObject(id: item.id, name: item.name)
-        } else {
-            viewer.removeObject(id: item.id)
-        }
+        renderer?.apply(.setObjectVisible(id: item.shapeID, objects[index].isVisible))
     }
 
     func removeObject(_ item: SceneObjectItem) {
         objects.removeAll { $0.id == item.id }
-        viewer.removeObject(id: item.id)
+        renderer?.removeObject(id: item.shapeID)
         if selectedObjectID == item.id {
             selectedObjectID = nil
         }
@@ -159,7 +205,7 @@ final class AppState: ObservableObject {
     func clearScene() {
         objects.removeAll()
         selectedObjectID = nil
-        viewer.clearScene()
+        renderer?.clearScene()
         appendLog(.info, "Scene cleared (console-side list only; core objects are cleared by the core's own clear command).")
     }
 
@@ -195,5 +241,25 @@ final class AppState: ObservableObject {
         case .failure(let error):
             appendLog(.error, "Save failed: \(error.localizedDescription)")
         }
+    }
+}
+
+// MARK: - ViewerBridgeDelegate
+
+extension AppState: ViewerBridgeDelegate {
+    func viewerDidChangeCamera(_ viewer: ViewerBridge) {}
+
+    func viewer(_ viewer: ViewerBridge, didPick result: PickResult?) {
+        guard let result else { return }
+        // MeshObject.id is the session shape name (== shapeID).
+        if let match = objects.first(where: { $0.shapeID == result.objectID }) {
+            selectedObjectID = match.id
+        }
+    }
+
+    func viewer(_ viewer: ViewerBridge, measureDistanceChanged distance: Float?) {}
+    func viewer(_ viewer: ViewerBridge, didWriteScreenshotTo path: String) {}
+    func viewer(_ viewer: ViewerBridge, didFailWith message: String) {
+        appendLog(.error, "Viewer: \(message)")
     }
 }
