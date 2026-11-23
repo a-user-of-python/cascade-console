@@ -419,3 +419,12 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   $HOME/workspace/cascade-port assumption as fix 3. Same conditional
   treatment. (The sim tests themselves had already passed locally and
   in the macOS job; the failing step was only this trailing check.)
+- CI fix 5b (IPA CascadeKit step): per-file compilation — xcodebuild
+  AND direct per-file clang — never finished in CI (>75 and >95 min
+  in-step): each of the 5,234 translation units re-parses the same
+  multi-megabyte OCCT header graph. Core/native/ci/build_cascadekit.sh
+  now compiles the identical sources as ~130 chunked-unity TUs
+  (40 files per TU, grouped by toolkit) with the exact defines and
+  language standard gen_project.py encodes; unity files only
+  #include the OCCT sources (unmodified, LGPL). The previous per-file
+  run was left racing; whichever finishes first populates the cache.
