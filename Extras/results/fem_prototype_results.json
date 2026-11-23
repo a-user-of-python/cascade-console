@@ -1,0 +1,38 @@
+{
+  "prototype": "P1 fem_prototype.py (host Python, NOT shipped code)",
+  "part": "cantilever beam 100x10x10 mm, steel E=200000 MPa nu=0.3",
+  "statics": {
+    "mesh": {
+      "nodes": 1025,
+      "elements": 640,
+      "voxel_mm": 2.5
+    },
+    "cg_info": 0,
+    "tip_deflection_mm_fem": 0.1929785250120664,
+    "tip_deflection_mm_euler_bernoulli": 0.2,
+    "tip_deflection_error_pct": 3.5107374939668117,
+    "max_vonmises_MPa_fem_centroid": 41.57799052484365,
+    "root_bending_stress_MPa_analytic_outer_fibre": 60.0,
+    "note_vm": "FEM value is per-element CENTROID von Mises on a 2.5 mm voxel mesh; the analytic 60 MPa is the outer-fibre peak. Centroid of the outermost root element's centroid sits 3.75 mm from the neutral axis vs 5 mm at the fibre (0.75x), so a lower FEM centroid number (~45 MPa bending-only estimate) is expected on this coarse mesh - reported as-is, not scaled."
+  },
+  "modal": {
+    "first_6_natural_frequencies_Hz_fem": [
+      827.7384663768565,
+      827.738466379741,
+      4959.655067373544,
+      4959.655067374083,
+      6963.965580279535,
+      12666.713375725136
+    ],
+    "f1_Hz_analytic_cantilever": 815.380645709505,
+    "f1_error_pct": 1.5155891585577672,
+    "note": "Lumped mass, same mesh/BCs as statics. First two FEM roots are the degenerate bending pair (y and z planes) - expected for a square cross-section."
+  },
+  "thermal": {
+    "midpoint_temp_C_fem_mean": 49.99999999999928,
+    "midpoint_temp_C_analytic_linear": 50.0,
+    "max_abs_deviation_from_linear_C": 7.744915819785092e-13,
+    "note": "Uniform cross-section + end Dirichlet faces => exact solution is linear in x; FEM must reproduce it to solver precision."
+  },
+  "wall_time_s": 0.22
+}

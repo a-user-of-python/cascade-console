@@ -1,0 +1,36 @@
+name: Build Mac app
+
+# Unsigned Mac build on a STANDARD free runner only (macos-26).
+# The Mac app is a SwiftPM executable target (Apps/Mac/Package.swift),
+# so this job can run today: it type-checks and links the scaffold
+# against the stub engine. It does NOT link OCCT yet (see
+# INTEGRATION-NOTES.md, "What remains").
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    name: Cascade Console Mac (SwiftPM, unsigned)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Mac scaffold
+        run: |
+          cd Apps/Mac
+          swift build -c release
+          ls -lh .build/release/CascadeConsoleMac
+      - name: Package app folder
+        run: |
+          rm -rf CascadeConsoleMac-unsigned
+          mkdir -p CascadeConsoleMac-unsigned
+          cp Apps/Mac/.build/release/CascadeConsoleMac CascadeConsoleMac-unsigned/
+          cp README.md CascadeConsoleMac-unsigned/
+          zip -qry CascadeConsoleMac-unsigned.zip CascadeConsoleMac-unsigned
+          ls -lh CascadeConsoleMac-unsigned.zip
+      - name: Upload Mac build
+        uses: actions/upload-artifact@v4
+        with:
+          name: CascadeConsoleMac-unsigned
+          path: CascadeConsoleMac-unsigned.zip

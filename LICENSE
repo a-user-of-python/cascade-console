@@ -1,0 +1,19 @@
+Cascade Console — app code licence
+
+Copyright (c) 2026 user. All rights reserved.
+
+The app code in this repository (Swift, Python, C/C++ façade code,
+documentation, and the user guide) is published for VIEWING ONLY.
+No permission is granted to use, copy, modify, merge, publish,
+distribute, sublicense, or sell copies of it, in whole or in part,
+without the author's prior written permission.
+
+This licence does NOT cover Open CASCADE Technology (OCCT), which is
+a separate work licensed under LGPL 2.1 + the Open CASCADE exception
+(Copyright Open Cascade SAS). Its licence texts are in the Licenses/
+folder:
+  Licenses/OCCT-LGPL-2.1.txt
+  Licenses/OCCT-LGPL-EXCEPTION.txt
+OCCT sources are used unmodified. Any future modification to OCCT
+sources must remain under LGPL 2.1 + exception and be disclosed in
+the repository README.

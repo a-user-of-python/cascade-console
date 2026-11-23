@@ -1,0 +1,30 @@
+name: Host tests
+
+# Linux host gates on a STANDARD free runner only (ubuntu-latest):
+# the Python reference interpreter's test suite and the viewer's
+# tessellation contract. These prove the language semantics and the
+# mesh contract; they are NOT device verification.
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  host-tests:
+    name: Prototype tests + tessellation contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install OCCT Python bindings
+        run: pip install "cadquery-ocp==7.8.1.1"
+      - name: Core prototype tests (47)
+        run: |
+          cd Core
+          python -m unittest discover -s tests -v
+      - name: Viewer tessellation contract
+        run: |
+          cd Shared/Viewer/Verification
+          python verify_tessellation.py

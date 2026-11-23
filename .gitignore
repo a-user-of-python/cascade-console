@@ -1,0 +1,28 @@
+# Build output
+build/
+.build/
+DerivedData/
+*.app
+Payload/
+*.ipa
+*.dmg
+
+# Xcode / SwiftPM
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+
+# Python prototype
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+
+# App runtime artefacts (never commit user data)
+*.ccproj
+Logs/

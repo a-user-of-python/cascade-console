@@ -1,0 +1,5 @@
+# Sample project — a simple mounting plate (units follow Settings)
+# plate 100 x 60 x 6
+box plate 100 60 6
+
+echo Sample project loaded

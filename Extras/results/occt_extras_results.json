@@ -1,0 +1,54 @@
+{
+  "mass_properties_box_40x20x10": {
+    "volume_mm3": 7999.999999999998,
+    "cog": [
+      20.0,
+      10.0,
+      5.0
+    ],
+    "inertia_diag": [
+      333333.33333333326,
+      1133333.333333333,
+      1333333.333333333
+    ],
+    "analytic": {
+      "volume_mm3": 8000.0,
+      "cog": [
+        20.0,
+        10.0,
+        5.0
+      ],
+      "inertia_diag": [
+        333333.3333333333,
+        1133333.3333333333,
+        1333333.3333333333
+      ]
+    },
+    "volume_error_pct": 2.2737367544323207e-14
+  },
+  "surface_area_box": {
+    "mm2": 2799.9999999999995,
+    "analytic_mm2": 2800
+  },
+  "interference_overlap": {
+    "common_volume_mm3": 1999.9999999999995,
+    "analytic_mm3": 2000
+  },
+  "clearance_gap": {
+    "min_distance_mm": 10.0,
+    "analytic_mm": 10.0,
+    "common_volume_mm3": 0.0
+  },
+  "cross_section_cylinder_at_z12": {
+    "area_mm2_slab_method": 314.1592653590842,
+    "analytic_mm2": 314.1592653589793,
+    "error_pct": 3.338310193664107e-11,
+    "method_note": "area = common(cyl, 0.002 mm slab) volume / slab thickness"
+  },
+  "draft_cone_side": {
+    "draft_angles_deg": [
+      11.309932474020215
+    ],
+    "analytic_deg": 11.309932474020215
+  }
+}

@@ -1,0 +1,22 @@
+# Cascade Console demo script — a flanged block with a through hole.
+# Run:  cascade_console.py scripts/demo.ccs   (paths below are relative
+# to the folder you run it from; adjust output/ as needed.)
+
+set wall = 4
+set bore = 6
+
+# Base plate profile, extruded
+profile plate 0,0 60,0 60,40 0,40
+extrude base plate 10
+
+# Boss on top, then a bore through both
+cylinder boss $bore+9 14 at 30,20,10
+union part base boss
+cylinder hole $bore 30 at 30,20,-2
+cut part2 part hole
+
+# Soften the result and ask questions
+fillet part3 part2 1.5
+info part3
+volume part3
+list

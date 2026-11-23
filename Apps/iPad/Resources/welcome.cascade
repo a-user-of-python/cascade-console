@@ -1,0 +1,10 @@
+# Cascade Console — welcome
+# Lines starting with # are comments.
+# Type a command below and press Return (or Run).
+#
+# Try:
+#   help            list available commands
+#   box b 10 20 30  create a 10 x 20 x 30 box named b
+#   view            show the model in the 3D view
+
+echo Welcome to Cascade Console

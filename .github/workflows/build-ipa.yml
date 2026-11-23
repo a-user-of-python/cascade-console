@@ -1,0 +1,45 @@
+name: Build iPad IPA
+
+# Unsigned iPad build on a STANDARD free runner only (macos-26).
+# Modelled on the cascade-port build-ipa workflow.
+# NOTE: until the Xcode project for Apps/iPad is generated (see
+# INTEGRATION-NOTES.md, "What remains"), this workflow documents the
+# intended packaging steps and will fail at the xcodebuild step —
+# that failure is expected and honest, not a green checkmark.
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    name: Cascade Console unsigned IPA
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build CascadeConsole (unsigned)
+        run: |
+          xcodebuild build \
+            -project Apps/iPad/CascadeConsole.xcodeproj \
+            -scheme CascadeConsole \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+      - name: Package IPA
+        run: |
+          APP_PATH="build/dd/Build/Products/Release-iphoneos/CascadeConsole.app"
+          test -d "$APP_PATH"
+          rm -rf Payload CascadeConsole-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry CascadeConsole-unsigned.ipa Payload
+          ls -lh CascadeConsole-unsigned.ipa
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CascadeConsole-unsigned-ipa
+          path: CascadeConsole-unsigned.ipa

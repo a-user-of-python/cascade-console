@@ -1,0 +1,12 @@
+{
+  "h=2.5": {
+    "elements": 640,
+    "tip_deflection_mm": 0.1929785250120664,
+    "error_vs_euler_bernoulli_pct": 3.5107374939668117
+  },
+  "h=1.25": {
+    "elements": 5120,
+    "tip_deflection_mm": 0.19823339870931575,
+    "error_vs_euler_bernoulli_pct": 0.8833006453421305
+  }
+}

@@ -1,0 +1,2269 @@
+{
+ "app": "Cascade Console",
+ "occt_version_target": "8.0.1 (see cascade-port subset; full build expands toolkits as noted)",
+ "license": "OCCT: LGPL 2.1 + Open CASCADE exception. Attribution: keep OCCT/LICENSE_LGPL_21.txt and OCCT/OCCT_LGPL_EXCEPTION.txt, credit Open Cascade SAS, do not modify OCCT sources without disclosure (modified files must stay LGPL).",
+ "units": "mm internal (UnitsAPI converts)",
+ "commands": [
+  {
+   "command": "new",
+   "category": "Session & naming",
+   "args": "<name>",
+   "occt_class": "TopoDS_Compound / TDocStd_Document",
+   "toolkit": "TKBRep/TKLCAF",
+   "description": "Start an empty document/compound; all named shapes live here.",
+   "example": "new bracket"
+  },
+  {
+   "command": "set",
+   "category": "Session & naming",
+   "args": "<var> = <number|string|point|vector>",
+   "occt_class": "Expr / TKExpress expression interpreter",
+   "toolkit": "TKExpress",
+   "description": "Set a session variable usable in later arguments ($var). OCCT ships an expression parser (Expr), not a parametric history.",
+   "example": "set wall = 2.5"
+  },
+  {
+   "command": "show-vars",
+   "category": "Session & naming",
+   "args": "",
+   "occt_class": "— (app session layer over Expr)",
+   "toolkit": "TKExpress",
+   "description": "List session variables.",
+   "example": "show-vars"
+  },
+  {
+   "command": "units",
+   "category": "Session & naming",
+   "args": "mm|cm|m|in|ft",
+   "occt_class": "UnitsAPI / UnitsMethods",
+   "toolkit": "TKernel",
+   "description": "Set working length unit; OCCT internally works in mm and converts via UnitsAPI.",
+   "example": "units mm"
+  },
+  {
+   "command": "precision",
+   "category": "Session & naming",
+   "args": "<tolerance>",
+   "occt_class": "Precision::Confusion",
+   "toolkit": "TKernel",
+   "description": "Set/show the modelling tolerance used by builders.",
+   "example": "precision 1e-7"
+  },
+  {
+   "command": "rename",
+   "category": "Session & naming",
+   "args": "<shape> as <name>",
+   "occt_class": "TNaming_NamedShape / XCAFDoc_ShapeTool label",
+   "toolkit": "TKCAF/TKXCAF",
+   "description": "Give a shape a persistent name (OCAF/XCAF label).",
+   "example": "rename body1 as Housing"
+  },
+  {
+   "command": "list",
+   "category": "Session & naming",
+   "args": "[shapes|solids|faces|edges|wires|shells|compounds]",
+   "occt_class": "TopExp_Explorer",
+   "toolkit": "TKBRep",
+   "description": "List named shapes, optionally filtered by TopAbs type.",
+   "example": "list solids"
+  },
+  {
+   "command": "delete",
+   "category": "Session & naming",
+   "args": "<name>",
+   "occt_class": "TopoDS / TDF_Label removal",
+   "toolkit": "TKBRep/TKLCAF",
+   "description": "Remove a named shape from the session.",
+   "example": "delete tmp1"
+  },
+  {
+   "command": "duplicate",
+   "category": "Session & naming",
+   "args": "<name> as <newname>",
+   "occt_class": "BRepBuilderAPI_Copy",
+   "toolkit": "TKTopAlgo",
+   "description": "Deep-copy a shape under a new name.",
+   "example": "duplicate body1 as body2"
+  },
+  {
+   "command": "shape-history",
+   "category": "Session & naming",
+   "args": "<name>",
+   "occt_class": "BRepTools_History",
+   "toolkit": "TKTopAlgo",
+   "description": "Show boolean/feature modification history (generated/modified/deleted sub-shapes) recorded by BRepAlgoAPI builders for a named shape. RENAMED at integration: bare `history` is the session command log (app layer) — see INTEGRATION-NOTES.md resolution (a).",
+   "example": "shape-history fuse1"
+  },
+  {
+   "command": "undo",
+   "category": "Session & naming",
+   "args": "",
+   "occt_class": "TDocStd_Document Undo (OCAF)",
+   "toolkit": "TKCAF",
+   "description": "Undo last document transaction. NOTE: only works for operations recorded as OCAF transactions — the app must wrap commands; raw TopoDS edits have no undo in OCCT.",
+   "example": "undo"
+  },
+  {
+   "command": "redo",
+   "category": "Session & naming",
+   "args": "",
+   "occt_class": "TDocStd_Document Redo (OCAF)",
+   "toolkit": "TKCAF",
+   "description": "Redo an undone OCAF transaction.",
+   "example": "redo"
+  },
+  {
+   "command": "box",
+   "category": "Primitives (solids)",
+   "args": "dx dy dz [at x y z]",
+   "occt_class": "BRepPrimAPI_MakeBox",
+   "toolkit": "TKPrim",
+   "description": "Axis-aligned (or placed) rectangular solid.",
+   "example": "box 40 30 20 as plate"
+  },
+  {
+   "command": "wedge",
+   "category": "Primitives (solids)",
+   "args": "dx dy dz ltx [at x y z]",
+   "occt_class": "BRepPrimAPI_MakeWedge",
+   "toolkit": "TKPrim",
+   "description": "Wedge solid; ltx is top-face x length.",
+   "example": "wedge 40 30 20 15 as ramp"
+  },
+  {
+   "command": "cylinder",
+   "category": "Primitives (solids)",
+   "args": "r h [axis x y z dx dy dz] [angle deg]",
+   "occt_class": "BRepPrimAPI_MakeCylinder",
+   "toolkit": "TKPrim",
+   "description": "Cylinder, optionally a sector by angle.",
+   "example": "cylinder 10 50 as shaft"
+  },
+  {
+   "command": "cone",
+   "category": "Primitives (solids)",
+   "args": "r1 r2 h",
+   "occt_class": "BRepPrimAPI_MakeCone",
+   "toolkit": "TKPrim",
+   "description": "Cone/frustum between two radii.",
+   "example": "cone 20 5 30 as nozzle"
+  },
+  {
+   "command": "sphere",
+   "category": "Primitives (solids)",
+   "args": "r [vmin vmax] [angle deg]",
+   "occt_class": "BRepPrimAPI_MakeSphere",
+   "toolkit": "TKPrim",
+   "description": "Sphere, optionally truncated/sector.",
+   "example": "sphere 15 as ball"
+  },
+  {
+   "command": "torus",
+   "category": "Primitives (solids)",
+   "args": "R r [angle1 angle2] [angle deg]",
+   "occt_class": "BRepPrimAPI_MakeTorus",
+   "toolkit": "TKPrim",
+   "description": "Torus (donut), optionally partial.",
+   "example": "torus 30 8 as ring"
+  },
+  {
+   "command": "halfspace",
+   "category": "Primitives (solids)",
+   "args": "<face> x y z",
+   "occt_class": "BRepPrimAPI_MakeHalfSpace",
+   "toolkit": "TKPrim",
+   "description": "Infinite solid on one side of a face (boolean tool).",
+   "example": "halfspace topface 0 0 -1 as cutter"
+  },
+  {
+   "command": "prism-solid",
+   "category": "Primitives (solids)",
+   "args": "<face> dx dy dz",
+   "occt_class": "BRepPrimAPI_MakePrism",
+   "toolkit": "TKPrim",
+   "description": "Linear sweep of a face along a vector (see also extrude).",
+   "example": "prism-solid prof1 0 0 12 as pad"
+  },
+  {
+   "command": "revolution-solid",
+   "category": "Primitives (solids)",
+   "args": "<face> ax ay az dx dy dz angle",
+   "occt_class": "BRepPrimAPI_MakeRevolution",
+   "toolkit": "TKPrim",
+   "description": "Surface/solid of revolution of a face about an axis.",
+   "example": "revolution-solid prof1 0 0 0 0 0 1 360 as vase"
+  },
+  {
+   "command": "point",
+   "category": "Points, curves & edges",
+   "args": "x y z",
+   "occt_class": "gp_Pnt",
+   "toolkit": "TKMath",
+   "description": "Create a named point.",
+   "example": "point 10 0 5 as p1"
+  },
+  {
+   "command": "vertex",
+   "category": "Points, curves & edges",
+   "args": "x y z [tol]",
+   "occt_class": "BRepBuilderAPI_MakeVertex",
+   "toolkit": "TKTopAlgo",
+   "description": "Create a topological vertex.",
+   "example": "vertex 0 0 0 as v1"
+  },
+  {
+   "command": "line",
+   "category": "Points, curves & edges",
+   "args": "<p1> <p2> | x1 y1 z1 x2 y2 z2",
+   "occt_class": "GC_MakeSegment / Geom_TrimmedCurve + BRepBuilderAPI_MakeEdge",
+   "toolkit": "TKGeomBase/TKTopAlgo",
+   "description": "Straight segment edge.",
+   "example": "line 0 0 0  50 0 0 as e1"
+  },
+  {
+   "command": "infinite-line",
+   "category": "Points, curves & edges",
+   "args": "x y z dx dy dz",
+   "occt_class": "Geom_Line + BRepBuilderAPI_MakeEdge",
+   "toolkit": "TKG3d/TKTopAlgo",
+   "description": "Unbounded line (construction geometry).",
+   "example": "infinite-line 0 0 0 1 0 0 as axisx"
+  },
+  {
+   "command": "circle",
+   "category": "Points, curves & edges",
+   "args": "cx cy cz r [nx ny nz]",
+   "occt_class": "GC_MakeCircle / Geom_Circle",
+   "toolkit": "TKGeomBase/TKG3d",
+   "description": "Full circle edge.",
+   "example": "circle 0 0 0 20 as e2"
+  },
+  {
+   "command": "arc",
+   "category": "Points, curves & edges",
+   "args": "<p1> <p2> <p3> | circle <c> a1 a2",
+   "occt_class": "GC_MakeArcOfCircle",
+   "toolkit": "TKGeomBase",
+   "description": "Circular arc through 3 points or by angles.",
+   "example": "arc p1 p2 p3 as e3"
+  },
+  {
+   "command": "ellipse",
+   "category": "Points, curves & edges",
+   "args": "cx cy cz R r [nx ny nz]",
+   "occt_class": "GC_MakeEllipse / Geom_Ellipse",
+   "toolkit": "TKGeomBase/TKG3d",
+   "description": "Ellipse edge.",
+   "example": "ellipse 0 0 0 30 12 as e4"
+  },
+  {
+   "command": "hyperbola",
+   "category": "Points, curves & edges",
+   "args": "cx cy cz R r",
+   "occt_class": "GC_MakeHyperbola / Geom_Hyperbola",
+   "toolkit": "TKGeomBase/TKG3d",
+   "description": "Hyperbola branch edge.",
+   "example": "hyperbola 0 0 0 20 10 as e5"
+  },
+  {
+   "command": "parabola",
+   "category": "Points, curves & edges",
+   "args": "cx cy cz focal",
+   "occt_class": "GC_MakeParabola / Geom_Parabola",
+   "toolkit": "TKGeomBase/TKG3d",
+   "description": "Parabola edge.",
+   "example": "parabola 0 0 0 8 as e6"
+  },
+  {
+   "command": "bezier",
+   "category": "Points, curves & edges",
+   "args": "<p1> <p2> ... [weights w1 w2 ...]",
+   "occt_class": "Geom_BezierCurve + BRepBuilderAPI_MakeEdge",
+   "toolkit": "TKG3d/TKTopAlgo",
+   "description": "Bezier curve through control points (rational if weights given).",
+   "example": "bezier 0 0 0  10 20 0  30 20 0  40 0 0 as spline1"
+  },
+  {
+   "command": "bspline",
+   "category": "Points, curves & edges",
+   "args": "<p1> <p2> ... [degree d] [periodic]",
+   "occt_class": "Geom_BSplineCurve + GeomAPI_PointsToBSpline",
+   "toolkit": "TKG3d/TKGeomAlgo",
+   "description": "B-spline from control points, or interpolated (see interpolate).",
+   "example": "bspline 0 0 0  10 10 0  20 0 0  30 10 0 as rail"
+  },
+  {
+   "command": "interpolate",
+   "category": "Points, curves & edges",
+   "args": "<p1> <p2> ... [tangent1 ... tangent2 ...]",
+   "occt_class": "GeomAPI_Interpolate",
+   "toolkit": "TKGeomAlgo",
+   "description": "Smooth C2 curve passing exactly through the points, optional end tangents.",
+   "example": "interpolate p1 p2 p3 p4 as path"
+  },
+  {
+   "command": "trim",
+   "category": "Points, curves & edges",
+   "args": "<curve> u1 u2",
+   "occt_class": "Geom_TrimmedCurve + BRepBuilderAPI_MakeEdge",
+   "toolkit": "TKG3d/TKTopAlgo",
+   "description": "Trim a curve to a parameter range.",
+   "example": "trim spline1 0.2 0.8 as s1t"
+  },
+  {
+   "command": "offset-curve",
+   "category": "Points, curves & edges",
+   "args": "<edge> distance [nx ny nz]",
+   "occt_class": "Geom_OffsetCurve / BRepOffsetAPI_MakeOffset (2D/3D curve offset)",
+   "toolkit": "TKG3d/TKOffset",
+   "description": "Offset a curve by a distance in a plane.",
+   "example": "offset-curve e1 3 0 0 1 as e1o"
+  },
+  {
+   "command": "project-curve",
+   "category": "Points, curves & edges",
+   "args": "<edge> onto <face>",
+   "occt_class": "GeomAPI_ProjectPointOnSurf / BRepAlgoAPI + ProjLib",
+   "toolkit": "TKGeomAlgo/TKGeomBase",
+   "description": "Project a curve/point onto a surface, returning the projected edge.",
+   "example": "project-curve path onto topface as ppath"
+  },
+  {
+   "command": "extend-curve",
+   "category": "Points, curves & edges",
+   "args": "<edge> by <len> [continuity C0|C1|C2]",
+   "occt_class": "GeomLib_ExtendCurveByLength / ShapeExtend",
+   "toolkit": "TKGeomBase/TKShHealing",
+   "description": "Extend a curve by a length with chosen continuity.",
+   "example": "extend-curve s1 10 C1 as s1x"
+  },
+  {
+   "command": "helix",
+   "category": "Points, curves & edges",
+   "args": "r pitch height [axis ...]",
+   "occt_class": "Parametric cylindrical curve via Geom_Surface (cylinder) + Geom2d_Line diagonal + BRepBuilderAPI_MakeEdge",
+   "toolkit": "TKG3d/TKTopAlgo",
+   "description": "True helix edge: a diagonal 2D line on a cylindrical surface mapped to 3D. OCCT has no single MakeHelix primitive class — this is the documented construction route, and thread/screw sweeps build on it.",
+   "example": "helix 10 5 40 as coil"
+  },
+  {
+   "command": "spiral",
+   "category": "Points, curves & edges",
+   "args": "r1 r2 turns height",
+   "occt_class": "Geom_BSplineCurve (sampled Archimedean spiral, GeomAPI_PointsToBSpline)",
+   "toolkit": "TKG3d/TKGeomAlgo",
+   "description": "Planar/ conical spiral approximated by an interpolated B-spline — labelled approximation, not an analytic OCCT curve type.",
+   "example": "spiral 2 20 3 0 as cam"
+  },
+  {
+   "command": "curve-length",
+   "category": "Points, curves & edges",
+   "args": "<edge>",
+   "occt_class": "GCPnts_AbscissaPoint / BRepGProp on edge",
+   "toolkit": "TKGeomBase/TKTopAlgo",
+   "description": "Report arc length of an edge/curve.",
+   "example": "curve-length path"
+  },
+  {
+   "command": "curve-point",
+   "category": "Points, curves & edges",
+   "args": "<edge> at <u|fraction|length>",
+   "occt_class": "Geom_Curve::Value / GCPnts_AbscissaPoint",
+   "toolkit": "TKG3d/TKGeomBase",
+   "description": "Evaluate a point (and optionally tangent) on a curve.",
+   "example": "curve-point path at length 12.5"
+  },
+  {
+   "command": "curve-curvature",
+   "category": "Points, curves & edges",
+   "args": "<edge> at <u>",
+   "occt_class": "GeomLProp_CLProps / BRepLProp",
+   "toolkit": "TKGeomBase/TKBRep",
+   "description": "Report curvature/radius at a parameter.",
+   "example": "curve-curvature spline1 at 0.5"
+  },
+  {
+   "command": "plane",
+   "category": "Surfaces & faces",
+   "args": "x y z [nx ny nz] [w h]",
+   "occt_class": "Geom_Plane + BRepBuilderAPI_MakeFace",
+   "toolkit": "TKG3d/TKTopAlgo",
+   "description": "Planar face, optionally bounded.",
+   "example": "plane 0 0 0 0 0 1 100 100 as datum"
+  },
+  {
+   "command": "cylindrical-surface",
+   "category": "Surfaces & faces",
+   "args": "r [axis ...] [w h]",
+   "occt_class": "Geom_CylindricalSurface + BRepBuilderAPI_MakeFace",
+   "toolkit": "TKG3d/TKTopAlgo",
+   "description": "Cylindrical surface face.",
+   "example": "cylindrical-surface 25 as borewall"
+  },
+  {
+   "command": "conical-surface",
+   "category": "Surfaces & faces",
+   "args": "r semiangle [axis ...]",
+   "occt_class": "Geom_ConicalSurface",
+   "toolkit": "TKG3d",
+   "description": "Conical surface face.",
+   "example": "conical-surface 20 15 as cone_wall"
+  },
+  {
+   "command": "spherical-surface",
+   "category": "Surfaces & faces",
+   "args": "r [centre ...]",
+   "occt_class": "Geom_SphericalSurface",
+   "toolkit": "TKG3d",
+   "description": "Spherical surface face.",
+   "example": "spherical-surface 20 as dome_surf"
+  },
+  {
+   "command": "toroidal-surface",
+   "category": "Surfaces & faces",
+   "args": "R r",
+   "occt_class": "Geom_ToroidalSurface",
+   "toolkit": "TKG3d",
+   "description": "Toroidal surface face.",
+   "example": "toroidal-surface 30 8 as torus_surf"
+  },
+  {
+   "command": "surface-of-revolution",
+   "category": "Surfaces & faces",
+   "args": "<edge> ax ay az dx dy dz",
+   "occt_class": "Geom_SurfaceOfRevolution",
+   "toolkit": "TKG3d",
+   "description": "Surface made by revolving a curve.",
+   "example": "surface-of-revolution prof 0 0 0 0 0 1 as surf1"
+  },
+  {
+   "command": "surface-of-extrusion",
+   "category": "Surfaces & faces",
+   "args": "<edge> dx dy dz",
+   "occt_class": "Geom_SurfaceOfLinearExtrusion",
+   "toolkit": "TKG3d",
+   "description": "Surface made by extruding a curve along a direction.",
+   "example": "surface-of-extrusion e1 0 0 1 as surf2"
+  },
+  {
+   "command": "bezier-surface",
+   "category": "Surfaces & faces",
+   "args": "grid <rows x cols of points>",
+   "occt_class": "Geom_BezierSurface + BRepBuilderAPI_MakeFace",
+   "toolkit": "TKG3d/TKTopAlgo",
+   "description": "Bezier patch from a control net.",
+   "example": "bezier-surface grid pts.csv as patch"
+  },
+  {
+   "command": "bspline-surface",
+   "category": "Surfaces & faces",
+   "args": "grid <points> [degreeU d] [degreeV d]",
+   "occt_class": "Geom_BSplineSurface / GeomAPI_PointsToBSplineSurface",
+   "toolkit": "TKG3d/TKGeomAlgo",
+   "description": "B-spline surface from control net or interpolated through a point grid.",
+   "example": "bspline-surface grid pts.csv as skin"
+  },
+  {
+   "command": "fill-surface",
+   "category": "Surfaces & faces",
+   "args": "<edge1> [<edge2> ...] [style stretch|coons|curved] [continuity C0|C1|C2]",
+   "occt_class": "BRepOffsetAPI_MakeFilling / GeomFill_BSplineCurves",
+   "toolkit": "TKOffset/TKGeomAlgo",
+   "description": "Fill an n-sided hole bounded by edges (Plate/Filling). The CAD 'patch a hole' operation.",
+   "example": "fill-surface e1 e2 e3 e4 style coons as patch"
+  },
+  {
+   "command": "plate-surface",
+   "category": "Surfaces & faces",
+   "args": "<wire> [constraints points/curves]",
+   "occt_class": "GeomPlate_BuildPlateSurface / BRepFill? GeomPlate",
+   "toolkit": "TKGeomAlgo",
+   "description": "Plate surface passing through curve/point constraints with G1/G2 continuity targets.",
+   "example": "plate-surface boundary as fairing"
+  },
+  {
+   "command": "offset-surface",
+   "category": "Surfaces & faces",
+   "args": "<face> distance",
+   "occt_class": "Geom_OffsetSurface / BRepOffsetAPI_MakeOffsetShape",
+   "toolkit": "TKG3d/TKOffset",
+   "description": "Offset surface/sheet by a distance.",
+   "example": "offset-surface skin 1.5 as skin_off"
+  },
+  {
+   "command": "surface-point",
+   "category": "Surfaces & faces",
+   "args": "<face> at u v",
+   "occt_class": "Geom_Surface::Value / GeomLProp_SLProps",
+   "toolkit": "TKG3d/TKGeomBase",
+   "description": "Evaluate point, normal, curvature on a surface.",
+   "example": "surface-point skin at 0.5 0.5"
+  },
+  {
+   "command": "surface-uv",
+   "category": "Surfaces & faces",
+   "args": "<face> of x y z",
+   "occt_class": "GeomAPI_ProjectPointOnSurf",
+   "toolkit": "TKGeomAlgo",
+   "description": "Find UV parameters of the projection of a 3D point.",
+   "example": "surface-uv skin of 10 5 2"
+  },
+  {
+   "command": "ruled-surface",
+   "category": "Surfaces & faces",
+   "args": "<edge1> <edge2>",
+   "occt_class": "GeomFill / BRepFill ruled via GeomAPI? GeomFill_BSplineCurves style ruled",
+   "toolkit": "TKGeomAlgo",
+   "description": "Ruled (straight-line) surface between two curves.",
+   "example": "ruled-surface rail1 rail2 as ramp_surf"
+  },
+  {
+   "command": "wire",
+   "category": "Wires, profiles & sketches",
+   "args": "<edge1> <edge2> ... [ordered]",
+   "occt_class": "BRepBuilderAPI_MakeWire",
+   "toolkit": "TKTopAlgo",
+   "description": "Join connected edges into a wire; reports gaps if ends do not meet within tolerance.",
+   "example": "wire e1 e2 e3 e4 as prof1"
+  },
+  {
+   "command": "polygon",
+   "category": "Wires, profiles & sketches",
+   "args": "x1 y1 z1 x2 y2 z2 ... [close]",
+   "occt_class": "BRepBuilderAPI_MakePolygon",
+   "toolkit": "TKTopAlgo",
+   "description": "Polyline wire from points, optionally closed.",
+   "example": "polygon 0 0 0  40 0 0  40 30 0  0 30 0 close as prof1"
+  },
+  {
+   "command": "face",
+   "category": "Wires, profiles & sketches",
+   "args": "<wire> [plane x y z nx ny nz]",
+   "occt_class": "BRepBuilderAPI_MakeFace",
+   "toolkit": "TKTopAlgo",
+   "description": "Planar (or surface-bounded) face from a closed wire.",
+   "example": "face prof1 as face1"
+  },
+  {
+   "command": "face-with-holes",
+   "category": "Wires, profiles & sketches",
+   "args": "<outerwire> hole <wire1> [hole <wire2> ...]",
+   "occt_class": "BRepBuilderAPI_MakeFace (face + inner wires)",
+   "toolkit": "TKTopAlgo",
+   "description": "Face with inner wires as holes.",
+   "example": "face-with-holes outer hole inner1 as plate_face"
+  },
+  {
+   "command": "rectangle",
+   "category": "Wires, profiles & sketches",
+   "args": "w h [at x y] [plane ...]",
+   "occt_class": "BRepBuilderAPI_MakePolygon + MakeFace (app profile builder over OCCT)",
+   "toolkit": "TKTopAlgo",
+   "description": "Rectangle profile face — convenience profile built from OCCT edges, not a separate OCCT class.",
+   "example": "rectangle 40 30 as prof1"
+  },
+  {
+   "command": "circle-profile",
+   "category": "Wires, profiles & sketches",
+   "args": "r [at x y] [plane ...]",
+   "occt_class": "GC_MakeCircle + MakeWire + MakeFace",
+   "toolkit": "TKGeomBase/TKTopAlgo",
+   "description": "Circular profile face.",
+   "example": "circle-profile 12 as holeprof"
+  },
+  {
+   "command": "slot-profile",
+   "category": "Wires, profiles & sketches",
+   "args": "length r [at x y]",
+   "occt_class": "Two GC_MakeArcOfCircle + two GC_MakeSegment in a MakeWire",
+   "toolkit": "TKGeomBase/TKTopAlgo",
+   "description": "Oblong/slot profile face (convenience profile).",
+   "example": "slot-profile 30 6 as slot1"
+  },
+  {
+   "command": "sketch-begin",
+   "category": "Wires, profiles & sketches",
+   "args": "<name> [plane xy|xz|yz|<face>]",
+   "occt_class": "BRepBuilderAPI_MakeFace plane + app sketch record of OCCT edges",
+   "toolkit": "TKTopAlgo",
+   "description": "Start a named 2D profile on a plane/face. IMPORTANT: OCCT has NO parametric sketch constraint solver (see Limitations) — a 'sketch' here is a set of exact OCCT edges/wires on a plane, with numeric coordinates, not driven dimensions.",
+   "example": "sketch-begin prof1 plane xy"
+  },
+  {
+   "command": "sketch-line",
+   "category": "Wires, profiles & sketches",
+   "args": "x1 y1 x2 y2",
+   "occt_class": "GC_MakeSegment in sketch plane",
+   "toolkit": "TKGeomBase",
+   "description": "Add a line to the open sketch.",
+   "example": "sketch-line 0 0 40 0"
+  },
+  {
+   "command": "sketch-arc",
+   "category": "Wires, profiles & sketches",
+   "args": "x1 y1 x2 y2 x3 y3",
+   "occt_class": "GC_MakeArcOfCircle in sketch plane",
+   "toolkit": "TKGeomBase",
+   "description": "Add an arc through 3 sketch points.",
+   "example": "sketch-arc 40 0 40 15 30 30"
+  },
+  {
+   "command": "sketch-circle",
+   "category": "Wires, profiles & sketches",
+   "args": "x y r",
+   "occt_class": "GC_MakeCircle in sketch plane",
+   "toolkit": "TKGeomBase",
+   "description": "Add a circle to the open sketch.",
+   "example": "sketch-circle 20 15 6"
+  },
+  {
+   "command": "sketch-spline",
+   "category": "Wires, profiles & sketches",
+   "args": "x1 y1 x2 y2 ...",
+   "occt_class": "GeomAPI_Interpolate in sketch plane",
+   "toolkit": "TKGeomAlgo",
+   "description": "Add an interpolated spline to the open sketch.",
+   "example": "sketch-spline 0 30 15 38 40 30"
+  },
+  {
+   "command": "sketch-end",
+   "category": "Wires, profiles & sketches",
+   "args": "",
+   "occt_class": "BRepBuilderAPI_MakeWire + MakeFace",
+   "toolkit": "TKTopAlgo",
+   "description": "Close the sketch into wire(s)+face; reports open ends / self-intersections found by BRepCheck.",
+   "example": "sketch-end"
+  },
+  {
+   "command": "check-wire",
+   "category": "Wires, profiles & sketches",
+   "args": "<wire>",
+   "occt_class": "BRepCheck_Wire / ShapeAnalysis_Wire",
+   "toolkit": "TKTopAlgo/TKShHealing",
+   "description": "Report wire order, closure, self-intersection, small edges.",
+   "example": "check-wire prof1"
+  },
+  {
+   "command": "order-wire",
+   "category": "Wires, profiles & sketches",
+   "args": "<wire>",
+   "occt_class": "ShapeAnalysis_WireOrder / BRepLib",
+   "toolkit": "TKShHealing/TKTopAlgo",
+   "description": "Reorder/reconnect a wire's edges into a traversable order.",
+   "example": "order-wire messy as prof1"
+  },
+  {
+   "command": "extrude",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<face|wire> dx dy dz | along <dir> distance <d> [taper deg]",
+   "occt_class": "BRepPrimAPI_MakePrism (taper: BRepFeat? / BRepOffsetAPI taper via MakePrism + Draft)",
+   "toolkit": "TKPrim",
+   "description": "Extrude a profile face along a direction — the core pad operation.",
+   "example": "extrude prof1 along 0 0 1 distance 12 as pad"
+  },
+  {
+   "command": "extrude-symmetric",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<face> distance <d> [dir ...]",
+   "occt_class": "BRepPrimAPI_MakePrism (two-sided)",
+   "toolkit": "TKPrim",
+   "description": "Extrude equally both ways from the profile plane.",
+   "example": "extrude-symmetric prof1 distance 12 as pad"
+  },
+  {
+   "command": "extrude-to-face",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<face> dir ... to <targetface>",
+   "occt_class": "BRepFeat_MakePrism (up-to-face)",
+   "toolkit": "TKFeat",
+   "description": "Extrude a profile until it meets a target face — a local feature operation, not a plain prism.",
+   "example": "extrude-to-face prof1 to topface as boss"
+  },
+  {
+   "command": "revolve",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<face|wire> ax ay az dx dy dz angle",
+   "occt_class": "BRepPrimAPI_MakeRevol",
+   "toolkit": "TKPrim",
+   "description": "Revolve a profile about an axis by an angle (360 = full).",
+   "example": "revolve prof1 0 0 0 0 0 1 360 as turned"
+  },
+  {
+   "command": "loft",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<wire1> <wire2> ... [solid] [ruled] [closed]",
+   "occt_class": "BRepOffsetAPI_ThruSections",
+   "toolkit": "TKOffset",
+   "description": "Loft through a series of section wires; ruled = straight between sections, otherwise smooth.",
+   "example": "loft w1 w2 w3 solid as body1"
+  },
+  {
+   "command": "sweep",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<profilewire> along <spinewire> [frenet|fixed|auxiliary]",
+   "occt_class": "BRepOffsetAPI_MakePipeShell",
+   "toolkit": "TKOffset",
+   "description": "Sweep a profile along a path with a trihedron mode.",
+   "example": "sweep prof along path as rail"
+  },
+  {
+   "command": "pipe",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<profilewire> along <spinewire>",
+   "occt_class": "BRepOffsetAPI_MakePipe",
+   "toolkit": "TKOffset",
+   "description": "Constant-section pipe along a spine.",
+   "example": "pipe prof along path as tube"
+  },
+  {
+   "command": "pipe-shell",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<profile> along <spine> [mode frenet|corrected|discrete] [transition right|round|transformed]",
+   "occt_class": "BRepOffsetAPI_MakePipeShell (SetMode/SetTransitionMode)",
+   "toolkit": "TKOffset",
+   "description": "Full sweep control: mode and corner transition.",
+   "example": "pipe-shell prof along path mode frenet transition round as duct"
+  },
+  {
+   "command": "variable-sweep",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<spine> sections <wire@u ...>",
+   "occt_class": "BRepOffsetAPI_MakePipeShell with auxiliary spine / law functions (GeomFill with sections)",
+   "toolkit": "TKOffset/TKGeomAlgo",
+   "description": "Sweep whose section changes along the path (PipeShell with multiple sections / laws).",
+   "example": "variable-sweep path sections s@0 s@0.5 s@1 as duct"
+  },
+  {
+   "command": "helix-sweep",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<profile> r pitch height",
+   "occt_class": "BRepOffsetAPI_MakePipeShell along helix edge (see helix)",
+   "toolkit": "TKOffset",
+   "description": "Sweep a profile along a helix — screw threads, coils, springs (profile should be the thread tooth for threads).",
+   "example": "helix-sweep tooth r 10 pitch 5 height 40 as thread"
+  },
+  {
+   "command": "fill-sweep",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<edge1> <edge2> [support <face>]",
+   "occt_class": "BRepFill / GeomFill (swept surface between rails)",
+   "toolkit": "TKBool/TKGeomAlgo",
+   "description": "Swept surface between two guide curves (BRepFill).",
+   "example": "fill-sweep rail1 rail2 as surf"
+  },
+  {
+   "command": "groove",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<face> ax ay az dx dy dz angle",
+   "occt_class": "BRepFeat_MakeRevol (revolved local feature in cut mode — OCCT has no separate MakeGroove class in 8.0.1; verified against the TKFeat package list)",
+   "toolkit": "TKFeat",
+   "description": "Revolved cut feature (a turned groove) from a profile face.",
+   "example": "groove prof 0 0 0 0 0 1 360 as cut1"
+  },
+  {
+   "command": "hole-feature",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<solid> face <face> centre x y r depth <d>|through",
+   "occt_class": "BRepFeat_MakeCylindricalHole",
+   "toolkit": "TKFeat",
+   "description": "Drill a cylindrical hole as a local feature into a solid from a face (BRepFeat cylindrical-hole feature, with its own status/error reporting).",
+   "example": "hole-feature body1 face topface centre 20 15 r 3 depth through as body1"
+  },
+  {
+   "command": "rib-feature",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<face> ... (BRepFeat_MakeRibSlot)",
+   "occt_class": "BRepFeat_MakeRibSlot",
+   "toolkit": "TKFeat",
+   "description": "Rib/slot feature grown from a profile until it meets the base solid.",
+   "example": "rib-feature ribprof as rib1"
+  },
+  {
+   "command": "dprism-feature",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<face> dir ... [angle]",
+   "occt_class": "BRepFeat_MakeDPrism",
+   "toolkit": "TKFeat",
+   "description": "Drafted prism feature (prism with draft angle) fused/cut as a local operation.",
+   "example": "dprism-feature prof 0 0 1 as boss"
+  },
+  {
+   "command": "linear-feature",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<face> ...",
+   "occt_class": "BRepFeat_MakeLinearForm",
+   "toolkit": "TKFeat",
+   "description": "Linear (extruded-with-rules) feature form (rib/slot family).",
+   "example": "linear-feature prof as rib1"
+  },
+  {
+   "command": "glued-feature",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<feature> on <solid> glue <face>",
+   "occt_class": "BRepFeat_Gluer / LocOpe_Gluer",
+   "toolkit": "TKFeat",
+   "description": "Glue a feature shape onto a solid at a face (local operation keeping the rest untouched).",
+   "example": "glued-feature boss on body1 glue topface as body2"
+  },
+  {
+   "command": "split-feature",
+   "category": "Extrude, revolve, loft, sweep & features",
+   "args": "<solid> by <face|plane>",
+   "occt_class": "BRepFeat_SplitShape / LocOpe_SplitShape",
+   "toolkit": "TKFeat",
+   "description": "Split a shape by a tool face, keeping local-operation history.",
+   "example": "split-feature body1 by midplane as body1"
+  },
+  {
+   "command": "fuse",
+   "category": "Booleans & defeaturing",
+   "args": "<a> <b> [as <name>] [glue] [fuzzy <tol>]",
+   "occt_class": "BRepAlgoAPI_Fuse (BOPAlgo)",
+   "toolkit": "TKBO/TKBool",
+   "description": "Boolean union. glue = faster glued option for touching solids; fuzzy adds tolerance.",
+   "example": "fuse body1 boss1 as body1"
+  },
+  {
+   "command": "cut",
+   "category": "Booleans & defeaturing",
+   "args": "<a> minus <b> [...]",
+   "occt_class": "BRepAlgoAPI_Cut",
+   "toolkit": "TKBO/TKBool",
+   "description": "Boolean subtraction (a − b). Multiple tools allowed.",
+   "example": "cut body1 hole1 as body1"
+  },
+  {
+   "command": "common",
+   "category": "Booleans & defeaturing",
+   "args": "<a> <b>",
+   "occt_class": "BRepAlgoAPI_Common",
+   "toolkit": "TKBO/TKBool",
+   "description": "Boolean intersection — the volume shared by both.",
+   "example": "common a b as overlap"
+  },
+  {
+   "command": "section-boolean",
+   "category": "Booleans & defeaturing",
+   "args": "<a> <b>",
+   "occt_class": "BRepAlgoAPI_Section",
+   "toolkit": "TKBO/TKBool",
+   "description": "Edges where two shapes' surfaces intersect (no solid result).",
+   "example": "section-boolean a b as sect"
+  },
+  {
+   "command": "split",
+   "category": "Booleans & defeaturing",
+   "args": "<a> by <b>",
+   "occt_class": "BRepAlgoAPI_Splitter",
+   "toolkit": "TKBO/TKBool",
+   "description": "Split a by b, keeping all resulting pieces (splitter, unlike cut/fuse).",
+   "example": "split body1 by plane1 as pieces"
+  },
+  {
+   "command": "boolean-multi",
+   "category": "Booleans & defeaturing",
+   "args": "fuse|cut|common <a> tools <b1> <b2> ... [arguments ...]",
+   "occt_class": "BOPAlgo_Builder + BRepAlgoAPI_BuilderAlgo (general boolean with argument/tool sets — there is no BRepAlgoAPI_MultiFuse class in OCCT 8.0.1; verified)",
+   "toolkit": "TKBO",
+   "description": "General Boolean Operation (GBO) with separate argument and tool lists, non-destructive/fuzzy/glue options.",
+   "example": "boolean-multi fuse base tools t1 t2 as body1"
+  },
+  {
+   "command": "boolean-options",
+   "category": "Booleans & defeaturing",
+   "args": "",
+   "occt_class": "BOPAlgo_Options (SetFuzzyValue, SetGlue, SetRunParallel, SetUseOBB, CheckInverted)",
+   "toolkit": "TKBO",
+   "description": "Show/set global boolean options: fuzzy tolerance, glue, parallel, OBB pre-check, inverted-solid checking.",
+   "example": "boolean-options glue on fuzzy 0.001"
+  },
+  {
+   "command": "defeature",
+   "category": "Booleans & defeaturing",
+   "args": "<shape> remove faces <f1> [<f2> ...]",
+   "occt_class": "BRepAlgoAPI_Defeaturing",
+   "toolkit": "TKBO",
+   "description": "Remove selected faces (holes, fillets, pockets) and heal the surrounding solid closed — OCCT's defeaturing, built on the boolean engine.",
+   "example": "defeature body1 remove faces face(12) face(13) as clean"
+  },
+  {
+   "command": "halfspace-cut",
+   "category": "Booleans & defeaturing",
+   "args": "<shape> <face> x y z",
+   "occt_class": "BRepPrimAPI_MakeHalfSpace + BRepAlgoAPI_Cut",
+   "toolkit": "TKPrim/TKBO",
+   "description": "Cut a solid with the half-space beyond a face.",
+   "example": "halfspace-cut body1 cutface 0 0 -1 as trimmed"
+  },
+  {
+   "command": "fillet",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<shape> radius <r> on edges <e...> | all",
+   "occt_class": "BRepFilletAPI_MakeFillet",
+   "toolkit": "TKFillet",
+   "description": "Constant-radius rolling-ball fillet on selected edges (or all).",
+   "example": "fillet body1 radius 2 on edges edge(3) edge(4) as body1"
+  },
+  {
+   "command": "fillet-variable",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<shape> on edge <e> radius <r1> at start radius <r2> at end",
+   "occt_class": "BRepFilletAPI_MakeFillet::Add(r1,r2,edge)",
+   "toolkit": "TKFillet",
+   "description": "Variable-radius fillet along an edge.",
+   "example": "fillet-variable body1 on edge edge(3) radius 1 at start radius 4 at end as body1"
+  },
+  {
+   "command": "fillet-law",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<shape> on edge <e> law <values...>",
+   "occt_class": "BRepFilletAPI_MakeFillet::Add(Law_Function)",
+   "toolkit": "TKFillet",
+   "description": "Fillet radius driven by a law function along the edge.",
+   "example": "fillet-law body1 on edge edge(3) law 1 3 1 as body1"
+  },
+  {
+   "command": "chamfer",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<shape> distance <d> [distance2 <d2>|angle <deg>] on edges <e...>",
+   "occt_class": "BRepFilletAPI_MakeChamfer",
+   "toolkit": "TKFillet",
+   "description": "Chamfer: equal distances, two distances, or distance+angle.",
+   "example": "chamfer body1 distance 1.5 on edges all as body1"
+  },
+  {
+   "command": "chamfer-2d",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<face|wire> ...",
+   "occt_class": "ChFi2d_FilletAPI / ChFi2d_AnaFilletAlgo",
+   "toolkit": "TKFillet",
+   "description": "2D fillet/chamfer between planar edges in a profile (before extrusion).",
+   "example": "chamfer-2d prof1 as prof1"
+  },
+  {
+   "command": "fillet-2d",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<wire> radius <r> at vertex <v>",
+   "occt_class": "ChFi2d_FilletAlgo",
+   "toolkit": "TKFillet",
+   "description": "2D corner fillet inside a planar wire.",
+   "example": "fillet-2d prof1 radius 3 at vertex 2 as prof1"
+  },
+  {
+   "command": "shell",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<solid> thickness <t> remove faces <f...> [tol]",
+   "occt_class": "BRepOffsetAPI_MakeThickSolid",
+   "toolkit": "TKOffset",
+   "description": "Hollow a solid to a wall thickness, opening the listed faces.",
+   "example": "shell body1 thickness 2 remove faces topface as housing"
+  },
+  {
+   "command": "thicken",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<face|shell> thickness <t> [both]",
+   "occt_class": "BRepOffsetAPI_MakeThickSolid (sheet mode) / MakeOffsetShape",
+   "toolkit": "TKOffset",
+   "description": "Give a surface/sheet solid thickness.",
+   "example": "thicken skin thickness 1.5 as panel"
+  },
+  {
+   "command": "offset-shape",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<shape> distance <d> [mode skin|pipe|rectoverso] [join arc|intersection] [tol]",
+   "occt_class": "BRepOffsetAPI_MakeOffsetShape",
+   "toolkit": "TKOffset",
+   "description": "Offset a whole solid/sheet in/out by a distance (grow/shrink).",
+   "example": "offset-shape body1 distance -0.4 mode skin join arc as body1"
+  },
+  {
+   "command": "offset-face",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<face> distance <d>",
+   "occt_class": "BRepOffsetAPI_MakeOffset (face offset in a wire/face context)",
+   "toolkit": "TKOffset",
+   "description": "Offset a face/wire in its plane (2D offset for profiles).",
+   "example": "offset-face prof1 distance 2 as prof_big"
+  },
+  {
+   "command": "draft",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<shape> angle <deg> neutral <face|plane> dir x y z [add faces ...]",
+   "occt_class": "BRepOffsetAPI_DraftAngle",
+   "toolkit": "TKOffset",
+   "description": "Apply mould draft taper to selected faces about a neutral plane.",
+   "example": "draft body1 angle 3 neutral bottom dir 0 0 1 as body1"
+  },
+  {
+   "command": "draft-check",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<shape> dir x y z min <deg>",
+   "occt_class": "BRepOffsetAPI_DraftAngle analysis via face normals (GeomLProp) — app analysis over OCCT normals",
+   "toolkit": "TKOffset/TKGeomBase",
+   "description": "Report faces under the minimum draft angle for a pull direction (mouldability check). Analysis only; no geometry change.",
+   "example": "draft-check body1 dir 0 0 1 min 2"
+  },
+  {
+   "command": "sew-then-shell",
+   "category": "Fillet, chamfer, shell, offset & draft",
+   "args": "<shell> thickness <t>",
+   "occt_class": "ShapeFix + BRepOffsetAPI_MakeThickSolid",
+   "toolkit": "TKShHealing/TKOffset",
+   "description": "Convenience chain: sew/heal a sheet then thicken (app script of two OCCT ops).",
+   "example": "sew-then-shell sheet thickness 2 as solid1"
+  },
+  {
+   "command": "translate",
+   "category": "Transforms & patterns",
+   "args": "<shape> dx dy dz [copy as <name>]",
+   "occt_class": "gp_Trsf SetTranslation + BRepBuilderAPI_Transform",
+   "toolkit": "TKMath/TKTopAlgo",
+   "description": "Move a shape (in place unless copy).",
+   "example": "translate body1 10 0 0"
+  },
+  {
+   "command": "rotate",
+   "category": "Transforms & patterns",
+   "args": "<shape> ax ay az dx dy dz angle [copy]",
+   "occt_class": "gp_Trsf SetRotation + BRepBuilderAPI_Transform",
+   "toolkit": "TKMath/TKTopAlgo",
+   "description": "Rotate about an arbitrary axis.",
+   "example": "rotate body1 0 0 0 0 0 1 45"
+  },
+  {
+   "command": "scale",
+   "category": "Transforms & patterns",
+   "args": "<shape> factor <f> [centre x y z] [copy]",
+   "occt_class": "gp_Trsf SetScale + BRepBuilderAPI_Transform (true geometry scale: BRepBuilderAPI_GTransform)",
+   "toolkit": "TKMath/TKTopAlgo",
+   "description": "Uniform scale. NOTE: non-uniform scale needs gtransform (below) and converts surfaces to B-splines in places.",
+   "example": "scale body1 factor 2 centre 0 0 0 copy as big"
+  },
+  {
+   "command": "gtransform",
+   "category": "Transforms & patterns",
+   "args": "<shape> sx sy sz [centre ...]",
+   "occt_class": "BRepBuilderAPI_GTransform (gp_GTrsf)",
+   "toolkit": "TKTopAlgo/TKMath",
+   "description": "General (incl. non-uniform) transform; may downgrade analytic surfaces — reported honestly in output.",
+   "example": "gtransform body1 2 1 1 as stretched"
+  },
+  {
+   "command": "mirror",
+   "category": "Transforms & patterns",
+   "args": "<shape> plane x y z nx ny nz [copy]",
+   "occt_class": "gp_Trsf SetMirror + BRepBuilderAPI_Transform",
+   "toolkit": "TKMath/TKTopAlgo",
+   "description": "Mirror about a plane.",
+   "example": "mirror body1 plane 0 0 0 1 0 0 copy as otherhalf"
+  },
+  {
+   "command": "move-to",
+   "category": "Transforms & patterns",
+   "args": "<shape> place <target> [from <source>]",
+   "occt_class": "TopLoc_Location / gp_Trsf placement",
+   "toolkit": "TKBRep/TKMath",
+   "description": "Set a shape's location (placement) without rebuilding geometry — cheap, reversible.",
+   "example": "move-to part1 place loc1"
+  },
+  {
+   "command": "location",
+   "category": "Transforms & patterns",
+   "args": "<shape>",
+   "occt_class": "TopLoc_Location / TopoDS_Shape::Location",
+   "toolkit": "TKBRep",
+   "description": "Report a shape's placement (translation + rotation).",
+   "example": "location part1"
+  },
+  {
+   "command": "linear-pattern",
+   "category": "Transforms & patterns",
+   "args": "<shape|feature> dir x y z count <n> spacing <d> [fuse]",
+   "occt_class": "gp_Trsf repeated + BRepAlgoAPI_MultiFuse (app loop over OCCT transforms/booleans)",
+   "toolkit": "TKMath/TKBO",
+   "description": "Repeat a shape/feature in a line. OCCT has no single pattern class — this is an app loop over transforms (+ optional fuse), stated as such.",
+   "example": "linear-pattern hole1 dir 1 0 0 count 5 spacing 12 fuse as body1"
+  },
+  {
+   "command": "polar-pattern",
+   "category": "Transforms & patterns",
+   "args": "<shape> axis ... count <n> angle <total> [fuse]",
+   "occt_class": "gp_Trsf rotations + BRepAlgoAPI_MultiFuse (app loop)",
+   "toolkit": "TKMath/TKBO",
+   "description": "Repeat around an axis (same app-loop note as linear-pattern).",
+   "example": "polar-pattern tooth axis 0 0 0 0 0 1 count 12 angle 360 fuse as gear"
+  },
+  {
+   "command": "rect-pattern",
+   "category": "Transforms & patterns",
+   "args": "<shape> dir1 ... n1 spacing1 dir2 ... n2 spacing2 [fuse]",
+   "occt_class": "App loop of gp_Trsf + MultiFuse",
+   "toolkit": "TKMath/TKBO",
+   "description": "2D grid pattern (app loop, as above).",
+   "example": "rect-pattern hole1 dir1 1 0 0 n1 4 spacing1 10 dir2 0 1 0 n2 3 spacing2 10 fuse"
+  },
+  {
+   "command": "mirror-pattern",
+   "category": "Transforms & patterns",
+   "args": "<shape> plane ... fuse",
+   "occt_class": "gp_Trsf mirror + BRepAlgoAPI_Fuse",
+   "toolkit": "TKMath/TKBO",
+   "description": "Mirror and fuse to the original (symmetric part completion).",
+   "example": "mirror-pattern half plane 0 0 0 1 0 0 fuse as whole"
+  },
+  {
+   "command": "copy-transform",
+   "category": "Transforms & patterns",
+   "args": "<shape> transforms <file|list>",
+   "occt_class": "BRepBuilderAPI_Transform per transform (app loop)",
+   "toolkit": "TKTopAlgo",
+   "description": "Apply a list of transforms producing multiple copies (instancing by copy).",
+   "example": "copy-transform bolt transforms placements.csv as bolts"
+  },
+  {
+   "command": "info",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "TopExp_Explorer + TopAbs_ShapeEnum census",
+   "toolkit": "TKBRep",
+   "description": "Full census: solids/shells/faces/wires/edges/vertices, closed?, orientation, location.",
+   "example": "info body1"
+  },
+  {
+   "command": "type",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "TopoDS_Shape::ShapeType",
+   "toolkit": "TKBRep",
+   "description": "Report TopAbs type (SOLID, SHELL, FACE, ...).",
+   "example": "type body1"
+  },
+  {
+   "command": "solids",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "TopExp_Explorer(TopAbs_SOLID) / TopoDS::Solid",
+   "toolkit": "TKBRep",
+   "description": "List/count solids inside a shape, naming them solid(1)... for later commands.",
+   "example": "solids assembly1"
+  },
+  {
+   "command": "faces",
+   "category": "Topology, inspection & selection",
+   "args": "<shape> [type plane|cylinder|cone|sphere|torus|bspline|all]",
+   "occt_class": "TopExp_Explorer(TopAbs_FACE) + BRepAdaptor_Surface::GetType",
+   "toolkit": "TKBRep/TKG3d",
+   "description": "List faces, optionally only one surface type — the selection vocabulary for fillet/shell/etc.",
+   "example": "faces body1 type cylinder"
+  },
+  {
+   "command": "edges",
+   "category": "Topology, inspection & selection",
+   "args": "<shape> [type line|circle|bspline|all]",
+   "occt_class": "TopExp_Explorer(TopAbs_EDGE) + BRepAdaptor_Curve::GetType",
+   "toolkit": "TKBRep/TKG3d",
+   "description": "List edges by curve type.",
+   "example": "edges body1 type circle"
+  },
+  {
+   "command": "wires",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "TopExp_Explorer(TopAbs_WIRE)",
+   "toolkit": "TKBRep",
+   "description": "List wires.",
+   "example": "wires face1"
+  },
+  {
+   "command": "vertices",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "TopExp_Explorer(TopAbs_VERTEX) + BRep_Tool::Pnt",
+   "toolkit": "TKBRep",
+   "description": "List vertices with coordinates.",
+   "example": "vertices body1"
+  },
+  {
+   "command": "shells",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "TopExp_Explorer(TopAbs_SHELL)",
+   "toolkit": "TKBRep",
+   "description": "List shells and whether each is closed.",
+   "example": "shells body1"
+  },
+  {
+   "command": "face-info",
+   "category": "Topology, inspection & selection",
+   "args": "face(<n>) of <shape>",
+   "occt_class": "BRepAdaptor_Surface + GeomAdaptor_Surface (type, bounds, area via BRepGProp)",
+   "toolkit": "TKG3d/TKTopAlgo",
+   "description": "Surface type, UV bounds, area, normal at centre for one face.",
+   "example": "face-info face(4) of body1"
+  },
+  {
+   "command": "edge-info",
+   "category": "Topology, inspection & selection",
+   "args": "edge(<n>) of <shape>",
+   "occt_class": "BRepAdaptor_Curve (type, range, length)",
+   "toolkit": "TKG3d",
+   "description": "Curve type, parameter range, length for one edge.",
+   "example": "edge-info edge(7) of body1"
+  },
+  {
+   "command": "adjacent",
+   "category": "Topology, inspection & selection",
+   "args": "faces|edges to face(<n>)|edge(<n>) of <shape>",
+   "occt_class": "TopExp::MapShapesAndAncestors / TopTools indexed maps",
+   "toolkit": "TKBRep",
+   "description": "Adjacency: which faces share an edge, which edges bound a face, etc.",
+   "example": "adjacent faces to edge(7) of body1"
+  },
+  {
+   "command": "shared",
+   "category": "Topology, inspection & selection",
+   "args": "between <a> and <b>",
+   "occt_class": "TopExp::MapShapesAndAncestors intersection (app set logic over OCCT maps)",
+   "toolkit": "TKBRep",
+   "description": "Sub-shapes shared by two shapes.",
+   "example": "shared between a and b"
+  },
+  {
+   "command": "same-domain",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "ShapeUpgrade_UnifySameDomain (report mode) / TopExp maps",
+   "toolkit": "TKShHealing/TKBRep",
+   "description": "Find coplanar/coaxial same-domain faces that could be merged.",
+   "example": "same-domain body1"
+  },
+  {
+   "command": "orientation",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "TopoDS_Shape::Orientation / BRepLib::OrientClosedSolid",
+   "toolkit": "TKBRep/TKTopAlgo",
+   "description": "Report/fix solid orientation (forward/reversed, closed-solid orientation).",
+   "example": "orientation body1"
+  },
+  {
+   "command": "free-edges",
+   "category": "Topology, inspection & selection",
+   "args": "<shape>",
+   "occt_class": "ShapeAnalysis_FreeBounds / TopExp edge-use count",
+   "toolkit": "TKShHealing/TKBRep",
+   "description": "Edges used by only one face — open boundaries / cracks.",
+   "example": "free-edges sheet1"
+  },
+  {
+   "command": "check",
+   "category": "Topology, inspection & selection",
+   "args": "<shape> [verbose]",
+   "occt_class": "BRepCheck_Analyzer (+ BRepCheck per-subshape results)",
+   "toolkit": "TKTopAlgo",
+   "description": "Validity check: is the shape a valid B-Rep? Lists invalid sub-shapes and fault codes.",
+   "example": "check body1 verbose"
+  },
+  {
+   "command": "contains",
+   "category": "Topology, inspection & selection",
+   "args": "<shape> point x y z [tol]",
+   "occt_class": "BRepClass3d_SolidClassifier",
+   "toolkit": "TKTopAlgo",
+   "description": "Is a point IN, ON, or OUT of a solid?",
+   "example": "contains body1 point 5 5 5"
+  },
+  {
+   "command": "classify",
+   "category": "Topology, inspection & selection",
+   "args": "<face|wire> ...",
+   "occt_class": "BRepClass_FaceClassifier / BRepClass2d? BRepClass3d",
+   "toolkit": "TKTopAlgo",
+   "description": "Classify point/face relationships (2D and 3D classifiers).",
+   "example": "classify face1 point 10 10"
+  },
+  {
+   "command": "explode",
+   "category": "Topology, inspection & selection",
+   "args": "<shape> into solids|faces|shells",
+   "occt_class": "TopExp_Explorer + naming (app naming over OCCT explorer)",
+   "toolkit": "TKBRep",
+   "description": "Split a compound/compsolid into individually named pieces.",
+   "example": "explode assembly1 into solids"
+  },
+  {
+   "command": "compound",
+   "category": "Topology, inspection & selection",
+   "args": "<s1> <s2> ... as <name>",
+   "occt_class": "TopoDS_Compound + BRep_Builder::Add",
+   "toolkit": "TKBRep",
+   "description": "Group shapes into a compound without fusing them.",
+   "example": "compound a b c as assembly1"
+  },
+  {
+   "command": "compsolid",
+   "category": "Topology, inspection & selection",
+   "args": "<solid1> <solid2> ... as <name>",
+   "occt_class": "TopoDS_CompSolid + BRep_Builder",
+   "toolkit": "TKBRep",
+   "description": "Group face-connected solids into a compsolid.",
+   "example": "compsolid s1 s2 as part"
+  },
+  {
+   "command": "extract",
+   "category": "Topology, inspection & selection",
+   "args": "<subshape-selector> from <shape> as <name>",
+   "occt_class": "TopExp_Explorer indexing (shared index space)",
+   "toolkit": "TKBRep",
+   "description": "Pull one face/edge/solid out as its own named shape.",
+   "example": "extract face(4) from body1 as topface"
+  },
+  {
+   "command": "measure-distance",
+   "category": "Measurement & analysis",
+   "args": "<a> <b> | point point",
+   "occt_class": "BRepExtrema_DistShapeShape",
+   "toolkit": "TKTopAlgo",
+   "description": "Minimum distance between two shapes/points, with the closest points.",
+   "example": "measure-distance body1 body2"
+  },
+  {
+   "command": "measure-length",
+   "category": "Measurement & analysis",
+   "args": "<edge|wire|shape>",
+   "occt_class": "BRepGProp::LinearProperties (GProp)",
+   "toolkit": "TKTopAlgo",
+   "description": "Total edge/wire length.",
+   "example": "measure-length prof1"
+  },
+  {
+   "command": "measure-area",
+   "category": "Measurement & analysis",
+   "args": "<face|shell|shape>",
+   "occt_class": "BRepGProp::SurfaceProperties",
+   "toolkit": "TKTopAlgo",
+   "description": "Surface area.",
+   "example": "measure-area body1"
+  },
+  {
+   "command": "measure-volume",
+   "category": "Measurement & analysis",
+   "args": "<solid|shape>",
+   "occt_class": "BRepGProp::VolumeProperties",
+   "toolkit": "TKTopAlgo",
+   "description": "Volume (signed; negative flags reversed orientation).",
+   "example": "measure-volume body1"
+  },
+  {
+   "command": "centre-of-mass",
+   "category": "Measurement & analysis",
+   "args": "<shape>",
+   "occt_class": "BRepGProp Volume/Surface/LinearProperties::CentreOfMass",
+   "toolkit": "TKTopAlgo",
+   "description": "Centre of mass/gravity for volume, area, or length as appropriate.",
+   "example": "centre-of-mass body1"
+  },
+  {
+   "command": "inertia",
+   "category": "Measurement & analysis",
+   "args": "<shape>",
+   "occt_class": "GProp_PrincipalProps / MatrixOfInertia via BRepGProp",
+   "toolkit": "TKTopAlgo/TKMath",
+   "description": "Moments of inertia, principal axes, radii of gyration about the centre of mass.",
+   "example": "inertia body1"
+  },
+  {
+   "command": "moment",
+   "category": "Measurement & analysis",
+   "args": "<shape> about <axis|plane>",
+   "occt_class": "GProp_PrincipalProps / BRepGProp with reference point",
+   "toolkit": "TKTopAlgo",
+   "description": "Moment of inertia about a chosen axis/point.",
+   "example": "moment body1 about axis 0 0 0 0 0 1"
+  },
+  {
+   "command": "bbox",
+   "category": "Measurement & analysis",
+   "args": "<shape> [optimal] [usemesh]",
+   "occt_class": "BRepBndLib::Add / AddOptimal + Bnd_Box",
+   "toolkit": "TKTopAlgo",
+   "description": "Axis-aligned bounding box; optimal = tight (slower, exact), usemesh = from triangulation.",
+   "example": "bbox body1 optimal"
+  },
+  {
+   "command": "bbox-gap",
+   "category": "Measurement & analysis",
+   "args": "<shape>",
+   "occt_class": "Bnd_Box::Gap",
+   "toolkit": "TKTopAlgo",
+   "description": "Report the tolerance gap inflated into the bounding box.",
+   "example": "bbox-gap body1"
+  },
+  {
+   "command": "angle-between",
+   "category": "Measurement & analysis",
+   "args": "<face|edge> <face|edge> [at point]",
+   "occt_class": "GeomLProp / BRepAdaptor normals & tangents (app math over OCCT adaptors)",
+   "toolkit": "TKG3d/TKGeomBase",
+   "description": "Angle between planes/cylinders' axes or edge tangents.",
+   "example": "angle-between face(1) face(2) of body1"
+  },
+  {
+   "command": "radius",
+   "category": "Measurement & analysis",
+   "args": "<edge|face>",
+   "occt_class": "BRepAdaptor_Curve/Surface (Circle radius / Cylinder radius / Sphere radius)",
+   "toolkit": "TKG3d",
+   "description": "Radius of a circular edge or cylindrical/spherical face.",
+   "example": "radius face(6) of body1"
+  },
+  {
+   "command": "perimeter",
+   "category": "Measurement & analysis",
+   "args": "<face|wire>",
+   "occt_class": "BRepGProp::LinearProperties on wires",
+   "toolkit": "TKTopAlgo",
+   "description": "Perimeter length of a face/wire.",
+   "example": "perimeter face1"
+  },
+  {
+   "command": "cross-section",
+   "category": "Measurement & analysis",
+   "args": "<shape> at <plane> [area]",
+   "occt_class": "BRepAlgoAPI_Section + BRepGProp on resulting face (via MakeFace)",
+   "toolkit": "TKBO/TKTopAlgo",
+   "description": "Section edges at a plane; with area, the section face area and centroid.",
+   "example": "cross-section body1 at plane z=15 area"
+  },
+  {
+   "command": "thickness-at",
+   "category": "Measurement & analysis",
+   "args": "<solid> point x y z dir ...",
+   "occt_class": "BRepIntCurveSurface_Inter / BRepExtrema ray cast (app ray over OCCT intersector)",
+   "toolkit": "TKTopAlgo/TKGeomAlgo",
+   "description": "Wall thickness along a ray through a solid (entry/exit distance).",
+   "example": "thickness-at housing point 0 0 30 dir 0 0 -1"
+  },
+  {
+   "command": "mass",
+   "category": "Measurement & analysis",
+   "args": "<shape> density <d>",
+   "occt_class": "BRepGProp volume x density (app arithmetic)",
+   "toolkit": "TKTopAlgo",
+   "description": "Mass from true OCCT volume and a user density — arithmetic, not a material database (OCCT has none built in).",
+   "example": "mass body1 density 7.85e-6"
+  },
+  {
+   "command": "heal",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> [all]",
+   "occt_class": "ShapeFix_Shape (runs the ShapeFix suite)",
+   "toolkit": "TKShHealing",
+   "description": "Run OCCT's full healing pipeline (wire, face, shell, solid fixes) and report what changed.",
+   "example": "heal imported as fixed"
+  },
+  {
+   "command": "fix-wire",
+   "category": "Healing, sewing & shape fix",
+   "args": "<wire|face>",
+   "occt_class": "ShapeFix_Wire",
+   "toolkit": "TKShHealing",
+   "description": "Fix wire order, small edges, self-intersection, nonadjacent points.",
+   "example": "fix-wire prof1 as prof1"
+  },
+  {
+   "command": "fix-face",
+   "category": "Healing, sewing & shape fix",
+   "args": "<face>",
+   "occt_class": "ShapeFix_Face",
+   "toolkit": "TKShHealing",
+   "description": "Fix face orientation, missing seam, loop wires, intersecting wires.",
+   "example": "fix-face f1 as f1"
+  },
+  {
+   "command": "fix-shell",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shell> [orientation]",
+   "occt_class": "ShapeFix_Shell",
+   "toolkit": "TKShHealing",
+   "description": "Fix shell face orientation / closedness.",
+   "example": "fix-shell sh1 as sh1"
+  },
+  {
+   "command": "fix-solid",
+   "category": "Healing, sewing & shape fix",
+   "args": "<solid>",
+   "occt_class": "ShapeFix_Solid",
+   "toolkit": "TKShHealing",
+   "description": "Fix solid shell orientation and construction.",
+   "example": "fix-solid s1 as s1"
+  },
+  {
+   "command": "fix-edge",
+   "category": "Healing, sewing & shape fix",
+   "args": "<edge> [sameparameter] [degenerated]",
+   "occt_class": "ShapeFix_Edge",
+   "toolkit": "TKShHealing",
+   "description": "Fix edge curve/3D-2D consistency (SameParameter), degenerated edges.",
+   "example": "fix-edge e1 sameparameter as e1"
+  },
+  {
+   "command": "sew",
+   "category": "Healing, sewing & shape fix",
+   "args": "<face|shell> ... [tol] [option cutting|nonmanifold]",
+   "occt_class": "BRepBuilderAPI_Sewing",
+   "toolkit": "TKTopAlgo",
+   "description": "Sew separate faces/shells into a shell/solid by stitching free edges within tolerance.",
+   "example": "sew f1 f2 f3 tol 0.01 as shell1"
+  },
+  {
+   "command": "unify",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> [faces] [edges] [safe]",
+   "occt_class": "ShapeUpgrade_UnifySameDomain",
+   "toolkit": "TKShHealing",
+   "description": "Merge same-domain (coplanar/coaxial/C1) faces and collinear edges into single faces/edges — the 'Refine Shape' operation; removes leftover split faces from imports/booleans.",
+   "example": "unify imported faces edges as clean"
+  },
+  {
+   "command": "remove-split",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape>",
+   "occt_class": "ShapeUpgrade_RemoveInternalWires / ShapeUpgrade split tools",
+   "toolkit": "TKShHealing",
+   "description": "Remove internal wires / redundant split features.",
+   "example": "remove-split body1 as body1"
+  },
+  {
+   "command": "convert-to-bspline",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> [curves] [surfaces]",
+   "occt_class": "ShapeCustom_ConvertToBSpline / ShapeUpgrade? ShapeCustom",
+   "toolkit": "TKShHealing",
+   "description": "Convert analytic curves/surfaces to B-splines (for downstream ops that need them).",
+   "example": "convert-to-bspline body1 surfaces as bsbody"
+  },
+  {
+   "command": "convert-to-revolution",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape>",
+   "occt_class": "ShapeCustom_ConvertToRevolution",
+   "toolkit": "TKShHealing",
+   "description": "Convert suitable surfaces to surfaces of revolution.",
+   "example": "convert-to-revolution body1 as body1"
+  },
+  {
+   "command": "bspline-restriction",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> continuity ... maxdegree ...",
+   "occt_class": "ShapeCustom_BSplineRestriction",
+   "toolkit": "TKShHealing",
+   "description": "Restrict B-spline degree/segments/continuity in a shape.",
+   "example": "bspline-restriction body1 maxdegree 8 as body1"
+  },
+  {
+   "command": "direct-faces",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape>",
+   "occt_class": "ShapeCustom_DirectFaces",
+   "toolkit": "TKShHealing",
+   "description": "Rebuild faces directly from their surfaces where builders left indirect geometry.",
+   "example": "direct-faces imported as imported"
+  },
+  {
+   "command": "analyse-surface",
+   "category": "Healing, sewing & shape fix",
+   "args": "<face>",
+   "occt_class": "ShapeAnalysis_Surface (bounds, singularities, closedness)",
+   "toolkit": "TKShHealing",
+   "description": "Report surface singularities, U/V closedness, bounds.",
+   "example": "analyse-surface face1"
+  },
+  {
+   "command": "analyse-curve",
+   "category": "Healing, sewing & shape fix",
+   "args": "<edge>",
+   "occt_class": "ShapeAnalysis_Curve (gaps, projection, bounds)",
+   "toolkit": "TKShHealing",
+   "description": "Report curve gaps and 3D/2D curve consistency.",
+   "example": "analyse-curve e1"
+  },
+  {
+   "command": "analyse-freebounds",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> [tol]",
+   "occt_class": "ShapeAnalysis_FreeBounds",
+   "toolkit": "TKShHealing",
+   "description": "List free boundary wires of a sheet (gaps to sew).",
+   "example": "analyse-freebounds sheet1"
+  },
+  {
+   "command": "analyse-shell",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape>",
+   "occt_class": "ShapeAnalysis_Shell (bad faces, free edges)",
+   "toolkit": "TKShHealing",
+   "description": "Report bad/free faces in shells.",
+   "example": "analyse-shell shell1"
+  },
+  {
+   "command": "small-edges",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> [tol]",
+   "occt_class": "ShapeAnalysis_CheckSmallFace / ShapeFix_Face small-face tools",
+   "toolkit": "TKShHealing",
+   "description": "Find (and optionally remove via fix) sliver faces / small edges.",
+   "example": "small-edges body1 tol 0.01"
+  },
+  {
+   "command": "spot-face",
+   "category": "Healing, sewing & shape fix",
+   "args": "<face>",
+   "occt_class": "ShapeAnalysis_CheckSmallFace::IsSpotFace",
+   "toolkit": "TKShHealing",
+   "description": "Detect spot (tiny) faces.",
+   "example": "spot-face face(9) of body1"
+  },
+  {
+   "command": "strip-face",
+   "category": "Healing, sewing & shape fix",
+   "args": "<face>",
+   "occt_class": "ShapeAnalysis_CheckSmallFace::IsStripFace",
+   "toolkit": "TKShHealing",
+   "description": "Detect strip (long thin) faces.",
+   "example": "strip-face face(9) of body1"
+  },
+  {
+   "command": "shape-process",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> <operator> [params]",
+   "occt_class": "ShapeProcess_Operator / ShapeProcessAPI_ApplySequence",
+   "toolkit": "TKShHealing",
+   "description": "Run a named ShapeProcess operator/sequence (OCCT's scriptable fix pipeline — the engine behind many import options).",
+   "example": "shape-process imported SplitShape as imported"
+  },
+  {
+   "command": "same-parameter",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> [tol]",
+   "occt_class": "BRepLib::SameParameter / ShapeFix_Edge",
+   "toolkit": "TKTopAlgo/TKShHealing",
+   "description": "Force edge 3D and 2D curves to share parametrisation within tolerance.",
+   "example": "same-parameter body1 as body1"
+  },
+  {
+   "command": "update-tolerance",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shape> <tol> [faces|edges|vertices]",
+   "occt_class": "BRep_Tool / ShapeFix? BRepLib tolerance update via TopoDS tolerances (ShapeUpgrade? )",
+   "toolkit": "TKBRep",
+   "description": "Set sub-shape tolerances (last-resort repair; loosening tolerance can hide real errors — output warns).",
+   "example": "update-tolerance imported 0.001 edges"
+  },
+  {
+   "command": "orient-solid",
+   "category": "Healing, sewing & shape fix",
+   "args": "<solid>",
+   "occt_class": "BRepLib::OrientClosedSolid",
+   "toolkit": "TKTopAlgo",
+   "description": "Orient a closed solid outward.",
+   "example": "orient-solid s1 as s1"
+  },
+  {
+   "command": "build-solid",
+   "category": "Healing, sewing & shape fix",
+   "args": "<shell> [tol]",
+   "occt_class": "BRepBuilderAPI_MakeSolid / ShapeFix_Solid",
+   "toolkit": "TKTopAlgo/TKShHealing",
+   "description": "Make a solid from a (closed) shell.",
+   "example": "build-solid shell1 as solid1"
+  },
+  {
+   "command": "build-shell",
+   "category": "Healing, sewing & shape fix",
+   "args": "<face> ... ",
+   "occt_class": "BRepBuilderAPI_Sewing + TopoDS_Shell via BRep_Builder",
+   "toolkit": "TKTopAlgo/TKBRep",
+   "description": "Assemble faces into a shell without sewing (shared topology as-is).",
+   "example": "build-shell f1 f2 as shell1"
+  },
+  {
+   "command": "import-step",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>] [mode shape|xcaf]",
+   "occt_class": "STEPControl_Reader / STEPCAFControl_Reader (XDE)",
+   "toolkit": "TKDESTEP/TKXCAF",
+   "description": "Import STEP AP203/AP214/AP242. shape mode = geometry only; xcaf mode = assembly structure, names, colours, materials, GD&T where present.",
+   "example": "import-step bracket.step as body1 mode xcaf"
+  },
+  {
+   "command": "export-step",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> <file> [ap242|ap214|ap203] [units mm|in] [colours]",
+   "occt_class": "STEPControl_Writer / STEPCAFControl_Writer",
+   "toolkit": "TKDESTEP/TKXCAF",
+   "description": "Export STEP with schema and unit choice; colours/names need the XDE writer.",
+   "example": "export-step body1 out.step ap242 colours"
+  },
+  {
+   "command": "import-iges",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>]",
+   "occt_class": "IGESControl_Reader",
+   "toolkit": "TKDEIGES",
+   "description": "Import IGES (surfaces/wires often arrive as sheets — follow with sew/heal).",
+   "example": "import-iges surf.iges as sheet1"
+  },
+  {
+   "command": "export-iges",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> <file> [brep|faces]",
+   "occt_class": "IGESControl_Writer",
+   "toolkit": "TKDEIGES",
+   "description": "Export IGES, B-Rep or face mode.",
+   "example": "export-iges body1 out.iges brep"
+  },
+  {
+   "command": "import-brep",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>]",
+   "occt_class": "BRepTools::Read",
+   "toolkit": "TKBRep",
+   "description": "Import OCCT native BREP text/binary shape file — lossless OCCT topology.",
+   "example": "import-brep part.brep as body1"
+  },
+  {
+   "command": "export-brep",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> <file> [binary]",
+   "occt_class": "BRepTools::Write / BinTools::Write",
+   "toolkit": "TKBRep",
+   "description": "Export native BREP (text) or binary BREP.",
+   "example": "export-brep body1 part.brep"
+  },
+  {
+   "command": "save-xbf",
+   "category": "Import / export (data exchange)",
+   "args": "<shape|document> <file>",
+   "occt_class": "BinTools / PCDM via TDocStd + BinDrivers (XBF binary OCAF)",
+   "toolkit": "TKBRep/TKBin/TKCDF",
+   "description": "Save in OCCT binary format (XBF / BinTools shape or full OCAF document).",
+   "example": "save-xbf body1 part.xbf"
+  },
+  {
+   "command": "load-xbf",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>]",
+   "occt_class": "BinTools::Read / BinDrivers retrieval",
+   "toolkit": "TKBRep/TKBin",
+   "description": "Load XBF/binary BREP or document.",
+   "example": "load-xbf part.xbf as body1"
+  },
+  {
+   "command": "save-xml",
+   "category": "Import / export (data exchange)",
+   "args": "<document> <file>",
+   "occt_class": "XmlDrivers / TDocStd (OCAF XML persistence)",
+   "toolkit": "TKXml/TKCDF",
+   "description": "Save the OCAF document as XML (XCAF structure included).",
+   "example": "save-xml doc part.xml"
+  },
+  {
+   "command": "import-stl",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>]",
+   "occt_class": "StlAPI_Reader / RWStl::ReadFile",
+   "toolkit": "TKDESTL/TKRWMesh",
+   "description": "Import STL as a faceted shell/compound of faces (NOT a smooth solid — see Limitations).",
+   "example": "import-stl mesh.stl as raw"
+  },
+  {
+   "command": "export-stl",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> <file> [ascii|binary] [deflection <d>]",
+   "occt_class": "StlAPI_Writer",
+   "toolkit": "TKDESTL",
+   "description": "Export STL, tessellating first with the given deflection.",
+   "example": "export-stl body1 out.stl binary deflection 0.1"
+  },
+  {
+   "command": "import-obj",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>]",
+   "occt_class": "RWObj_Reader (RWMesh)",
+   "toolkit": "TKRWMesh/TKDEOBJ",
+   "description": "Import Wavefront OBJ mesh.",
+   "example": "import-obj mesh.obj as raw"
+  },
+  {
+   "command": "export-obj",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> <file>",
+   "occt_class": "RWObj_Writer",
+   "toolkit": "TKRWMesh/TKDEOBJ",
+   "description": "Export OBJ from tessellation.",
+   "example": "export-obj body1 out.obj"
+  },
+  {
+   "command": "import-gltf",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>]",
+   "occt_class": "RWGltf_Reader",
+   "toolkit": "TKDEGLTF",
+   "description": "Import glTF/GLB (mesh + materials/structure via XCAF).",
+   "example": "import-gltf scene.glb as raw"
+  },
+  {
+   "command": "export-gltf",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> <file> [binary]",
+   "occt_class": "RWGltf_Writer",
+   "toolkit": "TKDEGLTF",
+   "description": "Export glTF/GLB from tessellation with colours/materials.",
+   "example": "export-gltf body1 out.glb binary"
+  },
+  {
+   "command": "import-vrml",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>]",
+   "occt_class": "VrmlAPI_CafReader / VrmlData (TKDEVRML)",
+   "toolkit": "TKDEVRML",
+   "description": "Import VRML mesh/shape.",
+   "example": "import-vrml scene.wrl as raw"
+  },
+  {
+   "command": "export-vrml",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> <file>",
+   "occt_class": "VrmlAPI_Writer",
+   "toolkit": "TKDEVRML",
+   "description": "Export VRML.",
+   "example": "export-vrml body1 out.wrl"
+  },
+  {
+   "command": "import-ply",
+   "category": "Import / export (data exchange)",
+   "args": "<file> [as <name>]",
+   "occt_class": "RWMesh PLY reader (TKDEPLY / RWMesh)",
+   "toolkit": "TKDEPLY/TKRWMesh",
+   "description": "Import PLY mesh.",
+   "example": "import-ply scan.ply as raw"
+  },
+  {
+   "command": "export-ply",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> <file>",
+   "occt_class": "RWMesh PLY writer",
+   "toolkit": "TKDEPLY/TKRWMesh",
+   "description": "Export PLY from tessellation.",
+   "example": "export-ply body1 out.ply"
+  },
+  {
+   "command": "import-dxf-note",
+   "category": "Import / export (data exchange)",
+   "args": "",
+   "occt_class": "— none in OCCT",
+   "toolkit": "—",
+   "description": "DXF is NOT an OCCT format. No command; use STEP/IGES instead. Listed explicitly so nobody assumes it.",
+   "example": "—"
+  },
+  {
+   "command": "xcaf-info",
+   "category": "Import / export (data exchange)",
+   "args": "<document|shape>",
+   "occt_class": "XCAFDoc_ShapeTool (labels, assemblies, instances)",
+   "toolkit": "TKXCAF",
+   "description": "Show XCAF assembly tree: labels, names, instances, locations.",
+   "example": "xcaf-info assembly1"
+  },
+  {
+   "command": "xcaf-colours",
+   "category": "Import / export (data exchange)",
+   "args": "<shape|document>",
+   "occt_class": "XCAFDoc_ColorTool",
+   "toolkit": "TKXCAF",
+   "description": "List XCAF colours per label/face (surface, curve, generic).",
+   "example": "xcaf-colours body1"
+  },
+  {
+   "command": "xcaf-materials",
+   "category": "Import / export (data exchange)",
+   "args": "<shape|document>",
+   "occt_class": "XCAFDoc_VisMaterialTool / XCAFDoc_MaterialTool",
+   "toolkit": "TKXCAF",
+   "description": "List XCAF materials / visual materials (PBR parameters stored in the file).",
+   "example": "xcaf-materials body1"
+  },
+  {
+   "command": "xcaf-gdt",
+   "category": "Import / export (data exchange)",
+   "args": "<shape|document>",
+   "occt_class": "XCAFDoc_DimTolTool (GD&T / dimensions & tolerances)",
+   "toolkit": "TKXCAF",
+   "description": "List GD&T, datums, dimensions stored in a STEP AP242 XCAF document (read/display — OCCT does not enforce them in modelling).",
+   "example": "xcaf-gdt body1"
+  },
+  {
+   "command": "xcaf-notes",
+   "category": "Import / export (data exchange)",
+   "args": "<shape|document>",
+   "occt_class": "XCAFDoc_NoteTool / XCAFNoteObjects",
+   "toolkit": "TKXCAF",
+   "description": "List notes/annotations stored in the XCAF document.",
+   "example": "xcaf-notes body1"
+  },
+  {
+   "command": "xcaf-views",
+   "category": "Import / export (data exchange)",
+   "args": "<shape|document>",
+   "occt_class": "XCAFDoc_ViewTool / XCAFView",
+   "toolkit": "TKXCAF",
+   "description": "List saved views/cameras stored in the document.",
+   "example": "xcaf-views body1"
+  },
+  {
+   "command": "assembly-add",
+   "category": "Import / export (data exchange)",
+   "args": "<shape> into <assembly> [name ...] [place ...]",
+   "occt_class": "XCAFDoc_ShapeTool::AddComponent / NewShape",
+   "toolkit": "TKXCAF",
+   "description": "Add a component instance to an XCAF assembly (instance shares geometry, carries its own location).",
+   "example": "assembly-add bolt into assembly1 place 10 0 0"
+  },
+  {
+   "command": "units-file",
+   "category": "Import / export (data exchange)",
+   "args": "<file>",
+   "occt_class": "Interface_Static / STEPControl unit settings; UnitsMethods",
+   "toolkit": "TKXSBase/TKernel",
+   "description": "Report/set the unit conversion applied on import/export (OCCT converts to mm).",
+   "example": "units-file bracket.step"
+  },
+  {
+   "command": "tessellate",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape> deflection <d> [angle <deg>] [relative] [parallel]",
+   "occt_class": "BRepMesh_IncrementalMesh + IMeshTools_Parameters",
+   "toolkit": "TKMesh",
+   "description": "Triangulate a shape's faces (the mesh the viewer and mesh exports use). Reports triangle count.",
+   "example": "tessellate body1 deflection 0.1 angle 15"
+  },
+  {
+   "command": "mesh-info",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape>",
+   "occt_class": "TopoDS_Face triangulation via BRep_Tool::Triangulation / Poly_Triangulation",
+   "toolkit": "TKBRep",
+   "description": "Report existing triangulation: triangles, nodes, deflection, per-face ranges.",
+   "example": "mesh-info body1"
+  },
+  {
+   "command": "mesh-clear",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape>",
+   "occt_class": "BRepTools::Clean",
+   "toolkit": "TKBRep",
+   "description": "Remove stored triangulation from a shape.",
+   "example": "mesh-clear body1"
+  },
+  {
+   "command": "mesh-check",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape>",
+   "occt_class": "Poly_Triangulation checks / BRepCheck on triangulation (app checks over Poly data)",
+   "toolkit": "TKBRep",
+   "description": "Check stored mesh for degenerate triangles / free mesh edges.",
+   "example": "mesh-check body1"
+  },
+  {
+   "command": "hlr",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape> view <dir> [outfile]",
+   "occt_class": "HLRBRep_Algo + HLRBRep_HLRToShape",
+   "toolkit": "TKHLR",
+   "description": "Hidden-line-removal projection: visible/hidden sharp & smooth edges as 2D/3D edges — the technical-drawing edge set.",
+   "example": "hlr body1 view 0 -1 0"
+  },
+  {
+   "command": "hlr-export",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape> view <dir> <file.step|brep>",
+   "occt_class": "HLRBRep_HLRToShape + STEP/BREP writer",
+   "toolkit": "TKHLR/TKDESTEP",
+   "description": "Export HLR result (drawing linework) as shapes.",
+   "example": "hlr-export body1 view 1 0 0 drawing.brep"
+  },
+  {
+   "command": "set-colour",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape|face-selector> colour <r g b|name>",
+   "occt_class": "XCAFDoc_ColorTool::SetColor (XDE) / Quantity_Color",
+   "toolkit": "TKXCAF/TKernel",
+   "description": "Set BRep/XCAF surface colour on a shape or face. Without an XCAF document this is document metadata, not geometry.",
+   "example": "set-colour body1 colour 0.2 0.5 0.9"
+  },
+  {
+   "command": "set-transparency",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape> alpha <0..1>",
+   "occt_class": "XCAFDoc_VisMaterial / Graphic3d transparency stored via XCAFDoc_ColorTool+VisMaterialTool",
+   "toolkit": "TKXCAF/TKService",
+   "description": "Set transparency as XCAF visual material data.",
+   "example": "set-transparency body1 alpha 0.4"
+  },
+  {
+   "command": "set-material",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape> material <name> [pbr metalness <m> roughness <r> basecolour ...]",
+   "occt_class": "XCAFDoc_VisMaterialTool (Graphic3d_MaterialAspect / PBR)",
+   "toolkit": "TKXCAF/TKService",
+   "description": "Attach an XCAF visual material (incl. PBR parameters) — data carried through STEP/glTF; shading itself is the viewer's job.",
+   "example": "set-material body1 material steel pbr metalness 0.9 roughness 0.35"
+  },
+  {
+   "command": "face-colours",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "<shape>",
+   "occt_class": "XCAFDoc_ColorTool::GetColor per face (as in cascade-port mc_shape_face_colors)",
+   "toolkit": "TKXCAF",
+   "description": "Report per-face colours carried by an imported XDE file.",
+   "example": "face-colours body1"
+  },
+  {
+   "command": "texture-note",
+   "category": "Tessellation, HLR & BRep appearance",
+   "args": "",
+   "occt_class": "XCAFDoc_VisMaterial textures (Graphic3d_TextureParams data)",
+   "toolkit": "TKXCAF/TKService",
+   "description": "OCCT XCAF can STORE texture references in visual materials, but OCCT does not UV-unwrap or texture-map B-Rep faces for you — listed as storage-only.",
+   "example": "—"
+  },
+  {
+   "command": "interference",
+   "category": "Interference, section & advanced geometry",
+   "args": "<a> <b>",
+   "occt_class": "BRepAlgoAPI_Common volume + BOPAlgo check / IntTools_FaceFace",
+   "toolkit": "TKBO/TKTopAlgo",
+   "description": "Interference report: do the solids overlap, and by what volume (common > 0)? Distinct from measure-distance (=0 when touching/overlapping).",
+   "example": "interference body1 body2"
+  },
+  {
+   "command": "clearance",
+   "category": "Interference, section & advanced geometry",
+   "args": "<a> <b> min <d>",
+   "occt_class": "BRepExtrema_DistShapeShape vs threshold",
+   "toolkit": "TKTopAlgo",
+   "description": "Pass/fail clearance check against a minimum gap.",
+   "example": "clearance body1 body2 min 1.0"
+  },
+  {
+   "command": "section",
+   "category": "Interference, section & advanced geometry",
+   "args": "<shape> by plane x y z nx ny nz [as <name>]",
+   "occt_class": "BRepAlgoAPI_Section with a plane face",
+   "toolkit": "TKBO",
+   "description": "Section edges of a shape cut by a plane (open result, not a solid).",
+   "example": "section body1 by plane 0 0 15 0 0 1 as sect1"
+  },
+  {
+   "command": "section-solid",
+   "category": "Interference, section & advanced geometry",
+   "args": "<shape> by plane ... keep above|below",
+   "occt_class": "BRepAlgoAPI_Cut/Splitter with halfspace",
+   "toolkit": "TKBO/TKPrim",
+   "description": "Cut a solid at a plane and keep one side (a capped section solid — via splitter + selection).",
+   "example": "section-solid body1 by plane 0 0 15 0 0 1 keep below as half"
+  },
+  {
+   "command": "slice",
+   "category": "Interference, section & advanced geometry",
+   "args": "<shape> planes z=<list> ",
+   "occt_class": "Repeated BRepAlgoAPI_Section (app loop)",
+   "toolkit": "TKBO",
+   "description": "Multiple parallel sections at once (contour slices).",
+   "example": "slice body1 planes z=5,10,15 as contours"
+  },
+  {
+   "command": "intersect-curves",
+   "category": "Interference, section & advanced geometry",
+   "args": "<edge1> <edge2>",
+   "occt_class": "GeomAPI_IntCS / IntCurves? GeomInt_IntSS / BRepIntCurveSurface",
+   "toolkit": "TKGeomAlgo",
+   "description": "Intersection points/curves between curves/surfaces.",
+   "example": "intersect-curves e1 e2"
+  },
+  {
+   "command": "intersect-surface",
+   "category": "Interference, section & advanced geometry",
+   "args": "<face1> <face2>",
+   "occt_class": "GeomInt_IntSS / BRepAlgoAPI_Section on faces",
+   "toolkit": "TKGeomAlgo/TKBO",
+   "description": "Surface-surface intersection curve(s).",
+   "example": "intersect-surface f1 f2"
+  },
+  {
+   "command": "extrema",
+   "category": "Interference, section & advanced geometry",
+   "args": "<shape> <shape> [all solutions]",
+   "occt_class": "BRepExtrema_DistShapeShape (all solutions mode)",
+   "toolkit": "TKTopAlgo",
+   "description": "All local distance extrema solutions between shapes, not just the minimum.",
+   "example": "extrema e1 f1 all solutions"
+  },
+  {
+   "command": "fair-curve",
+   "category": "Interference, section & advanced geometry",
+   "args": "<points> [tolerance] [smoothing]",
+   "occt_class": "FairCurve_Batten / FairCurve_MinimalVariation",
+   "toolkit": "TKGeomAlgo",
+   "description": "Fair (ship-curve style) a curve: batten/minimal-variation smoothing — OCCT's FairCurve package.",
+   "example": "fair-curve pts tolerance 0.1 as faired"
+  },
+  {
+   "command": "approx-curve",
+   "category": "Interference, section & advanced geometry",
+   "args": "<points|edge> [tol] [continuity] [maxdegree]",
+   "occt_class": "GeomAPI_PointsToBSpline / Approx_Curve3d / AdvApprox",
+   "toolkit": "TKGeomAlgo/TKGeomBase",
+   "description": "Approximate points or a curve by a B-spline within tolerance.",
+   "example": "approx-curve pts tol 0.05 as approx1"
+  },
+  {
+   "command": "approx-surface",
+   "category": "Interference, section & advanced geometry",
+   "args": "<points grid> [tol]",
+   "occt_class": "GeomAPI_PointsToBSplineSurface / Approx_Surface",
+   "toolkit": "TKGeomAlgo",
+   "description": "Approximate a point grid by a B-spline surface.",
+   "example": "approx-surface grid.csv tol 0.05 as surf"
+  },
+  {
+   "command": "convert-curve",
+   "category": "Interference, section & advanced geometry",
+   "args": "<edge> to bspline|bezier",
+   "occt_class": "GeomConvert_CurveToBSplineCurve / GeomConvert_ApproxCurve",
+   "toolkit": "TKGeomBase",
+   "description": "Convert a curve to B-spline/Bezier form.",
+   "example": "convert-curve e1 to bspline as e1b"
+  },
+  {
+   "command": "split-curve",
+   "category": "Interference, section & advanced geometry",
+   "args": "<edge> at <u> | at point ...",
+   "occt_class": "GeomConvert_SplitBSplineCurve / ShapeUpgrade_SplitCurve3d",
+   "toolkit": "TKGeomBase/TKShHealing",
+   "description": "Split a curve at parameters.",
+   "example": "split-curve spline1 at 0.5 as s_a s_b"
+  },
+  {
+   "command": "split-surface",
+   "category": "Interference, section & advanced geometry",
+   "args": "<face> at u <u> | v <v>",
+   "occt_class": "GeomConvert_SplitBSplineSurface / ShapeUpgrade_SplitSurface",
+   "toolkit": "TKGeomBase/TKShHealing",
+   "description": "Split a surface at parameters.",
+   "example": "split-surface skin at u 0.5"
+  },
+  {
+   "command": "merge-curves",
+   "category": "Interference, section & advanced geometry",
+   "args": "<edge1> <edge2> ...",
+   "occt_class": "ShapeUpgrade_UnifySameDomain (edges) / GeomConvert_ConcatBSplineCurve",
+   "toolkit": "TKShHealing/TKGeomBase",
+   "description": "Merge C1-connected collinear/co-circular edges into one.",
+   "example": "merge-curves e1 e2 as e_all"
+  },
+  {
+   "command": "project-point",
+   "category": "Interference, section & advanced geometry",
+   "args": "x y z onto <face|edge>",
+   "occt_class": "GeomAPI_ProjectPointOnSurf / GeomAPI_ProjectPointOnCurve",
+   "toolkit": "TKGeomAlgo",
+   "description": "Project a point; reports projected point, distance, parameters.",
+   "example": "project-point 10 10 10 onto face1"
+  },
+  {
+   "command": "surface-from-points",
+   "category": "Interference, section & advanced geometry",
+   "args": "<csv|points> [tol]",
+   "occt_class": "GeomAPI_PointsToBSplineSurface",
+   "toolkit": "TKGeomAlgo",
+   "description": "Interpolating/approximating surface through a point cloud grid (reverse-engineering helper).",
+   "example": "surface-from-points scan.csv as surf"
+  },
+  {
+   "command": "points-from-shape",
+   "category": "Interference, section & advanced geometry",
+   "args": "<shape> [spacing]",
+   "occt_class": "BRepMesh nodes / GCPnts_QuasiUniformDeflection sampling (app sampling over OCCT)",
+   "toolkit": "TKMesh/TKGeomBase",
+   "description": "Sample points on edges/faces (for inspection exports).",
+   "example": "points-from-shape body1 spacing 2"
+  },
+  {
+   "command": "view",
+   "category": "Viewing (app layer, OCCT-fed)",
+   "args": "<name> [fit]",
+   "occt_class": "— app viewer (Metal tessellation from BRepMesh_IncrementalMesh)",
+   "toolkit": "TKMesh (source data)",
+   "description": "Show the named shape in the 3D viewer. The viewer is the app's, not OCCT's AIS/OpenGL — OCCT supplies the triangulation.",
+   "example": "view body1"
+  },
+  {
+   "command": "view-all",
+   "category": "Viewing (app layer, OCCT-fed)",
+   "args": "",
+   "occt_class": "— app viewer over all named shapes' triangulations",
+   "toolkit": "TKMesh",
+   "description": "Show every named shape.",
+   "example": "view-all"
+  },
+  {
+   "command": "hide",
+   "category": "Viewing (app layer, OCCT-fed)",
+   "args": "<name>",
+   "occt_class": "— app viewer state",
+   "toolkit": "—",
+   "description": "Hide a shape in the viewer (geometry untouched).",
+   "example": "hide tmp1"
+  },
+  {
+   "command": "show",
+   "category": "Viewing (app layer, OCCT-fed)",
+   "args": "<name>",
+   "occt_class": "— app viewer state",
+   "toolkit": "—",
+   "description": "Show a hidden shape.",
+   "example": "show tmp1"
+  },
+  {
+   "command": "view-mode",
+   "category": "Viewing (app layer, OCCT-fed)",
+   "args": "shaded|wireframe|shaded-edges|transparent",
+   "occt_class": "— app viewer state (source: Poly_Triangulation + HLR edges optionally)",
+   "toolkit": "TKMesh/TKHLR",
+   "description": "Viewer display mode.",
+   "example": "view-mode shaded-edges"
+  },
+  {
+   "command": "screenshot",
+   "category": "Viewing (app layer, OCCT-fed)",
+   "args": "<file.png>",
+   "occt_class": "— app viewer render to file",
+   "toolkit": "—",
+   "description": "Save a viewer screenshot (app feature, not OCCT).",
+   "example": "screenshot out.png"
+  },
+  {
+   "command": "export-drawing",
+   "category": "Viewing (app layer, OCCT-fed)",
+   "args": "<shape> view <dir> <file>",
+   "occt_class": "HLRBRep_HLRToShape + writer (see hlr-export)",
+   "toolkit": "TKHLR",
+   "description": "Alias kept for discoverability; same OCCT HLR engine.",
+   "example": "export-drawing body1 view 0 -1 0 front.brep"
+  }
+ ],
+ "limitations_ref": "COMMAND_CATALOG.md#what-occt-does-not-provide",
+ "integration_notes": "history renamed to shape-history (integration resolution a); bare `history` = session command log, app layer. Export canonical forms are export-step/export-iges/... (resolution b); compact prototype forms are aliases."
+}

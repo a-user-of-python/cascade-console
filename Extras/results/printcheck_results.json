@@ -1,0 +1,11 @@
+{
+  "watertight_closed_box": true,
+  "watertight_open_box_2_faces_removed": false,
+  "volume_closed_box_mm3": 8000.0,
+  "wall_thickness_hollow_box": {
+    "true_wall_mm": 1.0,
+    "estimated_min_mm": 1.0,
+    "estimated_median_mm": 1.0,
+    "samples": 12
+  }
+}
