@@ -380,5 +380,9 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   multiarch dir /usr/lib/x86_64-linux-gnu; build_host.sh's rename
   detection only looked in $OCCT_PREFIX/lib, so the link failed with
   "cannot find -lTKSTEP / -lTKSTL". Detection in build_host.sh and
-  build_sim.sh now searches the multiarch dirs. (Local /usr has no
-  OCCT at all here, so this specific path is CI-verified only.)
+  build_sim.sh now also searches the chosen prefix's multiarch dir.
+  Scoping matters: an unscoped first version found the host's system
+  OCCT 7.x TKSTEP while linking against conda 8.0.1 and mixed the
+  two (link conflict, abort) — caught and fixed locally before the
+  push; detection is now prefix-scoped only. Local suites re-green
+  after the fix: engine 90 mock / 100 OCCT, sim 35/35 both.

@@ -31,7 +31,7 @@ TK_LIBS="-lTKPrim -lTKBO -lTKBool -lTKFillet -lTKMesh -lTKTopAlgo -lTKGeomAlgo -
 # Detection searches the multiarch lib dirs too (Ubuntu puts them in
 # /usr/lib/x86_64-linux-gnu, not $OCCT_PREFIX/lib).
 HAS_STEP=0; HAS_DESTEP=0
-for d in "$OCCT_LIB" "$OCCT_PREFIX/lib/x86_64-linux-gnu" /usr/lib/x86_64-linux-gnu /usr/lib; do
+for d in "$OCCT_LIB" "$OCCT_PREFIX/lib/x86_64-linux-gnu"; do
   [ -e "$d/libTKSTEP.so" ] && HAS_STEP=1
   [ -e "$d/libTKDESTEP.so" ] && HAS_DESTEP=1
 done

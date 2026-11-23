@@ -43,7 +43,7 @@ OCCT_LIBS="-lTKPrim -lTKBO -lTKBool -lTKFillet -lTKMesh -lTKTopAlgo \
 -lTKGeomAlgo -lTKShHealing -lTKBRep -lTKGeomBase -lTKG3d -lTKG2d \
 -lTKMath -lTKernel"
 HAS_DESTEP=0
-for d in "$OCCT_LIB" "$OCCT_PREFIX/lib/x86_64-linux-gnu" /usr/lib/x86_64-linux-gnu /usr/lib; do
+for d in "$OCCT_LIB" "$OCCT_PREFIX/lib/x86_64-linux-gnu"; do
   { [ -e "$d/libTKDESTEP.so" ] || [ -e "$d/libTKDESTEP.dylib" ]; } && HAS_DESTEP=1
 done
 if [ "$HAS_DESTEP" = 1 ]; then
