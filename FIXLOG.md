@@ -434,3 +434,10 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   ambiguous t3dto2d, ...). OCCT is not unity-safe and its sources
   must stay unmodified, so the workflow is back to the per-file
   direct-clang build (fix 4); build_cascadekit.sh removed.
+- CI fix 7 (IPA app build, run 45273079709 — CascadeKit and the
+  engine library themselves built GREEN): two Swift type errors.
+  (a) NativeEngine.viewData had an extra defaulted parameter, which
+  does not satisfy the EngineViewDataProviding witness; signature
+  restored to the protocol's, deflection fixed at 0.5 mm inside.
+  (b) Renderer.updateFaceLabels used `let host = view.layer` in a
+  guard; MTKView.layer is non-optional on iOS — split the binding.

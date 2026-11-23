@@ -564,7 +564,8 @@ extension CascadeRenderer {
             return
         }
         let bounds = view.bounds
-        guard bounds.width > 0, bounds.height > 0, let host = view.layer else { return }
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let host = view.layer
         let eye = store.camera.eyePosition
         var wanted: [String: (text: String, screen: CGPoint)] = [:]
 

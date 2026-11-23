@@ -104,15 +104,15 @@ public final class NativeEngine: CascadeEngine, EngineViewDataProviding {
     /// Tessellation for one object (or all when `name` is nil), in the
     /// cc_view_data layout the Metal viewer consumes (via the CCM1
     /// adapter in Shared/Viewer/Swift/EngineMeshAdapter.swift).
-    public func viewData(name: String?, deflectionMM: Double = 0.5) async -> [EngineViewObject] {
+    public func viewData(name: String?) async -> [EngineViewObject] {
         await withCheckedContinuation { continuation in
             queue.async { [self] in
                 guard let session else { continuation.resume(returning: []); return }
                 var objects: UnsafeMutablePointer<CCViewData>?
                 var count: Int32 = 0
                 let rc = name.map {
-                    cc_view_data(session, $0, deflectionMM, &objects, &count)
-                } ?? cc_view_data(session, nil, deflectionMM, &objects, &count)
+                    cc_view_data(session, $0, 0.5, &objects, &count)
+                } ?? cc_view_data(session, nil, 0.5, &objects, &count)
                 guard rc == 0, let objects else { continuation.resume(returning: []); return }
                 var result: [EngineViewObject] = []
                 for i in 0..<Int(count) {
