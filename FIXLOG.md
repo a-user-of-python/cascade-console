@@ -428,3 +428,9 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   language standard gen_project.py encodes; unity files only
   #include the OCCT sources (unmodified, LGPL). The previous per-file
   run was left racing; whichever finishes first populates the cache.
+- CI fix 5b REVERTED: chunked-unity compilation of OCCT fails —
+  file-scope static helpers collide across files within a toolkit
+  (redefinition of cherche_edge1 / IsLineOrCircle / Contains,
+  ambiguous t3dto2d, ...). OCCT is not unity-safe and its sources
+  must stay unmodified, so the workflow is back to the per-file
+  direct-clang build (fix 4); build_cascadekit.sh removed.
