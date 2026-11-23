@@ -386,3 +386,12 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   two (link conflict, abort) — caught and fixed locally before the
   push; detection is now prefix-scoped only. Local suites re-green
   after the fix: engine 90 mock / 100 OCCT, sim 35/35 both.
+- CI fix 3 (Native-engine ubuntu job, run 45257130018): engine tests
+  themselves now pass in CI (90 mock / 100 OCCT — fix 2 worked), but
+  build_host.sh's trailing mc-adapter compile check hardcoded
+  $HOME/workspace/cascade-port, which does not exist on a runner.
+  The check is now conditional on a cascade-port checkout being
+  present (CC_PORT_DIR), skipping loudly otherwise; on CI the macOS
+  job performs it against the pinned cascade-ios fetch.
+- build-ipa.yml: COMPILER_INDEX_STORE_ENABLE=NO on the CascadeKit
+  build (indexing 5,234 OCCT files in CI is pure overhead).

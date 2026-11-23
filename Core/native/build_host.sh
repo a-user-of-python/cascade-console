@@ -49,9 +49,17 @@ $CXX $CXXFLAGS -I"$OCCT_INC" src/cc_interpreter.cpp src/ccgeom_occt.cpp src/ccsi
 ./build/test_engine_occt occt
 
 echo "== mc adapter compile check (object only; CascadeKit link is a device/CI step) =="
-$CXX $CXXFLAGS -I"$HOME/workspace/cascade-port/Facade" -I src -c src/ccgeom_mc.cpp -o build/ccgeom_mc.o \
-  && echo "ccgeom_mc.cpp compiles against the real cascade-port occt_facade.h"
+# Needs a cascade-port checkout; on CI runners the dedicated macOS job
+# of build-native-engine.yml does this check against the pinned
+# cascade-ios fetch, so skip (loudly) when no checkout is present.
+PORT_DIR="${CC_PORT_DIR:-$HOME/workspace/cascade-port}"
+if [ -f "$PORT_DIR/Facade/occt_facade.h" ]; then
+  $CXX $CXXFLAGS -I"$PORT_DIR/Facade" -I src -c src/ccgeom_mc.cpp -o build/ccgeom_mc.o \
+    && echo "ccgeom_mc.cpp compiles against the real cascade-port occt_facade.h"
+  $CXX $CXXFLAGS -I"$PORT_DIR/Facade" -I src -c src/ccsim_backend_mc.cpp -o build/ccsim_backend_mc.o \
+    && echo "ccsim_backend_mc.cpp compiles against the real cascade-port occt_facade.h"
+else
+  echo "SKIP: no cascade-port checkout at $PORT_DIR (mc adapter check runs in the macOS CI job)"
+fi
 
 echo "ALL HOST BUILDS DONE"
-$CXX $CXXFLAGS -I"$HOME/workspace/cascade-port/Facade" -I src -c src/ccsim_backend_mc.cpp -o build/ccsim_backend_mc.o \
-  && echo "ccsim_backend_mc.cpp compiles against the real cascade-port occt_facade.h"

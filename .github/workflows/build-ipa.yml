@@ -63,6 +63,7 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             SYMROOT="$GITHUB_WORKSPACE/build/kitroot" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
