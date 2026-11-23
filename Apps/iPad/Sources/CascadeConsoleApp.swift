@@ -5,10 +5,10 @@ import SwiftUI
 /// unwraps and no throwing calls on any launch path.
 ///
 /// LINKING THE REAL CORE (Agent 2): replace `StubEngine()` below with
-/// the OCCT-backed implementation of `CascadeEngineFacing`.
-/// LINKING THE REAL VIEWER (Agent 5): `PlaceholderViewerBridge` stays
-/// as the bridge type if Agent 5 conforms to `CascadeViewerBridging`
-/// behind it, or swap the type here and in AppState together.
+/// the OCCT-backed implementation of the Shared `CascadeEngine`
+/// protocol (Shared/Engine/EngineProtocol.swift).
+/// LINKING THE REAL VIEWER (Agent 5): swap `PlaceholderViewerBridge`
+/// for `CascadeRenderer` (Shared/Viewer) here and in AppState together.
 @main
 struct CascadeConsoleApp: App {
     @StateObject private var state: AppState

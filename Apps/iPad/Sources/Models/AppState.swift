@@ -8,21 +8,21 @@ import SwiftUI
 /// explicitly @MainActor task in `run(command:)`.
 final class AppState: ObservableObject {
 
-    @Published var log: [LogEntry] = []
+    @Published var log: [ConsoleLogEntry] = []
     @Published var objects: [SceneObjectItem] = []
     @Published var selectedObjectID: UUID?
     @Published var scriptBuffer: String = ""
     @Published var currentFileName: String = "untitled.cascade"
     @Published var isRunning: Bool = false
 
-    let engine: CascadeEngineFacing
+    let engine: CascadeEngine
     let viewer: PlaceholderViewerBridge
     let fileStore: FileStore
 
     private var history: [String] = []
     private var historyIndex: Int?
 
-    init(engine: CascadeEngineFacing,
+    init(engine: CascadeEngine,
          viewer: PlaceholderViewerBridge,
          fileStore: FileStore) {
         self.engine = engine
@@ -41,9 +41,9 @@ final class AppState: ObservableObject {
 
     // MARK: - Console
 
-    func appendLog(_ kind: LogEntry.Kind, _ text: String) {
+    func appendLog(_ kind: ConsoleLogEntry.Kind, _ text: String) {
         guard !text.isEmpty else { return }
-        log.append(LogEntry(kind: kind, text: text))
+        log.append(ConsoleLogEntry(kind: kind, text: text))
         // Keep the log bounded so a long session cannot grow forever.
         if log.count > 2000 {
             log.removeFirst(log.count - 2000)
@@ -125,11 +125,10 @@ final class AppState: ObservableObject {
         } else {
             appendLog(.output, result.output)
         }
-        for (index, shapeID) in result.producedShapeIDs.enumerated() {
-            let name = index < result.producedNames.count
-                ? result.producedNames[index]
-                : shapeID
-            let item = SceneObjectItem(shapeID: shapeID, name: name)
+        // Shared CommandResult carries session names only; in the
+        // Layer-2 design the session name IS the shape handle (shapeID).
+        for name in result.producedNames {
+            let item = SceneObjectItem(shapeID: name, name: name)
             objects.append(item)
             viewer.displayObject(id: item.id, name: item.name)
             selectedObjectID = item.id

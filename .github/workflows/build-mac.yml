@@ -1,10 +1,14 @@
 name: Build Mac app
 
 # Unsigned Mac build on a STANDARD free runner only (macos-26).
-# The Mac app is a SwiftPM executable target (Apps/Mac/Package.swift),
-# so this job can run today: it type-checks and links the scaffold
-# against the stub engine. It does NOT link OCCT yet (see
-# INTEGRATION-NOTES.md, "What remains").
+# The Mac app is a SwiftPM executable target (Apps/Mac/Package.swift,
+# target CascadeConsoleMac, sources in Apps/Mac/CascadeConsoleMac/).
+# The package is intentionally standalone: it does NOT depend on
+# Shared/ yet (see the header of Package.swift for the explicit
+# resolution and the duplicate-type collisions that decision avoids).
+# It type-checks and links the scaffold against its stub engine; it
+# does NOT link OCCT (see INTEGRATION-NOTES.md, "What remains").
+# Any build failure fails this job — nothing here masks errors.
 
 on:
   workflow_dispatch:
@@ -20,6 +24,7 @@ jobs:
         run: |
           cd Apps/Mac
           swift build -c release
+          test -x .build/release/CascadeConsoleMac
           ls -lh .build/release/CascadeConsoleMac
       - name: Package app folder
         run: |

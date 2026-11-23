@@ -1,11 +1,15 @@
 name: Build iPad IPA
 
 # Unsigned iPad build on a STANDARD free runner only (macos-26).
-# Modelled on the cascade-port build-ipa workflow.
-# NOTE: until the Xcode project for Apps/iPad is generated (see
-# INTEGRATION-NOTES.md, "What remains"), this workflow documents the
-# intended packaging steps and will fail at the xcodebuild step —
-# that failure is expected and honest, not a green checkmark.
+# The Xcode project now exists: Apps/iPad/CascadeConsole.xcodeproj,
+# scheme "CascadeConsole" (shared scheme in xcshareddata), target
+# CascadeConsole, bundle id com.user.cascadeconsole, iPad only,
+# deployment target iOS 17.0. It builds against the Swift StubEngine
+# in Shared/Engine — the native OCCT Layer-2 library does not exist
+# yet (see the TODO header in project.pbxproj), so a green run means
+# "the app compiles and packages", NOT "CAD commands work on device".
+# Any build failure fails this job — nothing here masks errors
+# (no continue-on-error, no `|| true`).
 
 on:
   workflow_dispatch:
@@ -17,6 +21,12 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Verify project and scheme exist
+        run: |
+          test -f Apps/iPad/CascadeConsole.xcodeproj/project.pbxproj
+          test -f Apps/iPad/CascadeConsole.xcodeproj/xcshareddata/xcschemes/CascadeConsole.xcscheme
+          test -f Shared/Resources/catalog.json
+          xcodebuild -list -project Apps/iPad/CascadeConsole.xcodeproj
       - name: Build CascadeConsole (unsigned)
         run: |
           xcodebuild build \
@@ -29,10 +39,16 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
-      - name: Package IPA
+      - name: Verify the app bundle carries its resources
         run: |
           APP_PATH="build/dd/Build/Products/Release-iphoneos/CascadeConsole.app"
           test -d "$APP_PATH"
+          test -f "$APP_PATH/catalog.json"
+          test -f "$APP_PATH/default.metallib"
+          test -f "$APP_PATH/OCCT-LGPL-2.1.txt"
+      - name: Package IPA
+        run: |
+          APP_PATH="build/dd/Build/Products/Release-iphoneos/CascadeConsole.app"
           rm -rf Payload CascadeConsole-unsigned.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/

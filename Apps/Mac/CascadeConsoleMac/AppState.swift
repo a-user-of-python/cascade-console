@@ -30,10 +30,16 @@ final class AppState: ObservableObject {
     /// Swappable so Agent 2's real engine replaces the stub in one line
     /// (in the app entry point) without touching any view code.
     var engine: ConsoleEngine
-    let viewer: ViewerBridge
+    // BUILD FIX: this was typed as `ViewerBridge`, but the Mac target
+    // defines no such type (the protocol of that name lives in
+    // Shared/Viewer and has a completely different surface), so the
+    // scaffold could never have compiled. The concrete placeholder
+    // class is the honest type until AppState is repointed at
+    // CascadeRenderer (INTEGRATION-NOTES.md resolution (e) TODO).
+    let viewer: PlaceholderViewerBridge
 
     init(engine: ConsoleEngine = StubConsoleEngine(),
-         viewer: ViewerBridge = PlaceholderViewerBridge()) {
+         viewer: PlaceholderViewerBridge = PlaceholderViewerBridge()) {
         self.engine = engine
         self.viewer = viewer
         for line in WelcomeScript.welcomeLines {

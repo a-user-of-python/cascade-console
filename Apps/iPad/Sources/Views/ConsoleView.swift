@@ -117,7 +117,7 @@ struct ConsoleView: View {
         state.run(command: command)
     }
 
-    private func displayText(for entry: LogEntry) -> String {
+    private func displayText(for entry: ConsoleLogEntry) -> String {
         if showTimestamps {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm:ss"
@@ -126,10 +126,12 @@ struct ConsoleView: View {
         return entry.text
     }
 
-    private func color(for kind: LogEntry.Kind) -> Color {
+    private func color(for kind: ConsoleLogEntry.Kind) -> Color {
         switch kind {
         case .input: return .primary
         case .output: return .secondary
+        case .result: return .primary
+        case .warning: return .orange
         case .error: return .red
         case .info: return .blue
         }

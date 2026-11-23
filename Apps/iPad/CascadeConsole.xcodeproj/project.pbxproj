@@ -1,0 +1,501 @@
+// Cascade Console - iPad app Xcode project (hand-authored, BUILD agent).
+// Target: CascadeConsole, bundle id com.user.cascadeconsole, iPad only
+// (TARGETED_DEVICE_FAMILY = 2), IPHONEOS_DEPLOYMENT_TARGET = 17.0.
+// Deployment-target rationale: the app code uses ContentUnavailableView
+// and the iOS 17 onChange forms; Liquid Glass (glassEffect) is reached
+// only behind #available(iOS 26.0, *) in GlassStyle.swift, and the
+// viewer guards its platform code with #if os(...) - so 17.0 is the
+// floor the sources actually require, and the project builds with the
+// Xcode 26 SDK on the macos-26 CI runner.
+// Sources: Apps/iPad/Sources/** (adapted to the Shared canonical types),
+// ../../Shared/** (models, settings keys, engine protocol + StubEngine,
+// command history, viewer Swift + Shaders.metal), catalog.json and the
+// OCCT licence texts as Resources.
+// TODO (native Layer-2, does not exist yet): when cascade-port's OCCT
+// device library + Core/facade Layer-2 session library exist, link them
+// here (OTHER_LDFLAGS / library search path to the cascade-port build)
+// and swap StubEngine for the OCCT-backed CascadeEngine in
+// Sources/CascadeConsoleApp.swift. Until then this target builds and
+// runs against the Swift StubEngine, which answers NOT_IMPLEMENTED
+// (E5002 / CC-SYS-000) for modelling commands - the honest current state.
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B2FC2C2DFD44B974DB24764A /* CascadeConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6BE564ED39E39EB0C0FE034 /* CascadeConsoleApp.swift */; };
+		54D9FD24A38BFF0B7DB64CC8 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231870B807BB763715D62925 /* AppState.swift */; };
+		E9F30B3E49278C1D3FEBABDE /* ExampleScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D04909D81C630A396BC2EEC /* ExampleScript.swift */; };
+		064C0C022BED2239ACC507CF /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DADA8A7ACEB88BC83D56E72 /* FileStore.swift */; };
+		64FF6FD35A59989E73977F96 /* ViewerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEED642D631F79192C05FE86 /* ViewerBridge.swift */; };
+		13092A651A80BD3C5458D2EA /* ViewportPlaceholderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D67C66DB77B8C46C6CE05858 /* ViewportPlaceholderView.swift */; };
+		421B05D570A58899A22DE859 /* ConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B6AA9A1520F335A6168D54 /* ConsoleView.swift */; };
+		80FF12993149F283914AA030 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1405B8BDBEA8BADDC2CC792 /* ContentView.swift */; };
+		9CF6A56E4B79E7D7252D3A3C /* FileBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EE8E0CA29413B891C44EF6 /* FileBrowserView.swift */; };
+		4E858BF5DC6659B6D0535FA7 /* GlassStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538584395A63FA571433493F /* GlassStyle.swift */; };
+		FFD794A445529F63BC3EA2A5 /* ObjectListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1F180B8BD186E8D481B7B8 /* ObjectListView.swift */; };
+		F9DF072A96F7EAF07BE82B2D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28D75BCA5677032AD4DFF12F /* SettingsView.swift */; };
+		68B8018768BB4E4BB0C0A314 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52606AD54B5D233086AE504B /* WelcomeView.swift */; };
+		36D8F1638018DBF319BA075F /* CommandHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 580B7AA5BF4E97323DA6ACF4 /* CommandHistory.swift */; };
+		479A75783B61FAD45CB253A0 /* EngineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275CCF1F3AA70B80342B61C1 /* EngineProtocol.swift */; };
+		B75E6D6C17619AC39CAB1D1B /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E034BCF1E391B4C8D6CA64BD /* SharedModels.swift */; };
+		92535D1FFEB47A8C00AE20E0 /* SettingsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE3AD425C040A620ED8B2CCF /* SettingsKeys.swift */; };
+		9EB2739DB5B7C8148E819D04 /* Camera.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1F27660E7B12A208ABB425 /* Camera.swift */; };
+		CA56389D445433F9784790FA /* CascadeMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6113FE979560419DE4DA38C1 /* CascadeMetalView.swift */; };
+		4CA828D2029ED93F507E54CB /* MeshBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2832F9925C34934165BA92 /* MeshBuffer.swift */; };
+		B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E37E3031BB95344C6955ECEB /* Renderer.swift */; };
+		738671A8703034CAE1F7D60D /* SceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A541D50550CEACC7F3A9E026 /* SceneStore.swift */; };
+		461CDBA82AC4277FDB20D6E9 /* ViewCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */; };
+		D70372D4EE9FE86D52566BA0 /* ViewerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E632BCF1CBCAB36F1726BDEC /* ViewerBridge.swift */; };
+		3062E72D41E5A106F798260D /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 837DED834ACEE9B0A65D36F2 /* Shaders.metal */; };
+		6DF93C9E313C10C833F14F92 /* catalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 8A3D93E007D38727A5CCD71B /* catalog.json */; };
+		DB63955F27590181CFC37668 /* welcome.cascade in Resources */ = {isa = PBXBuildFile; fileRef = 0DFF00CE78206D6F20EF4348 /* welcome.cascade */; };
+		A7FAB19D88B2D21AF3CA30B0 /* sample-project.cascade in Resources */ = {isa = PBXBuildFile; fileRef = 12B04C8E8482C1837C5B6797 /* sample-project.cascade */; };
+		BD35DF139F2623E849CAE369 /* OCCT-LGPL-2.1.txt in Resources */ = {isa = PBXBuildFile; fileRef = D7622C242FF9F440B225C98C /* OCCT-LGPL-2.1.txt */; };
+		BC05DFDD3158E1DB4199C6C5 /* OCCT-LGPL-EXCEPTION.txt in Resources */ = {isa = PBXBuildFile; fileRef = FD2FE2F1EA4E1E7371D7D9BC /* OCCT-LGPL-EXCEPTION.txt */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		E1ABC9AD5577FA6363DF72E7 /* CascadeConsole.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CascadeConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C6BE564ED39E39EB0C0FE034 /* CascadeConsoleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CascadeConsoleApp.swift"; sourceTree = "<group>"; };
+		231870B807BB763715D62925 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppState.swift"; sourceTree = "<group>"; };
+		8D04909D81C630A396BC2EEC /* ExampleScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExampleScript.swift"; sourceTree = "<group>"; };
+		2DADA8A7ACEB88BC83D56E72 /* FileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileStore.swift"; sourceTree = "<group>"; };
+		FEED642D631F79192C05FE86 /* ViewerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewerBridge.swift"; sourceTree = "<group>"; };
+		D67C66DB77B8C46C6CE05858 /* ViewportPlaceholderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewportPlaceholderView.swift"; sourceTree = "<group>"; };
+		A0B6AA9A1520F335A6168D54 /* ConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConsoleView.swift"; sourceTree = "<group>"; };
+		D1405B8BDBEA8BADDC2CC792 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView.swift"; sourceTree = "<group>"; };
+		D6EE8E0CA29413B891C44EF6 /* FileBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileBrowserView.swift"; sourceTree = "<group>"; };
+		538584395A63FA571433493F /* GlassStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlassStyle.swift"; sourceTree = "<group>"; };
+		8E1F180B8BD186E8D481B7B8 /* ObjectListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ObjectListView.swift"; sourceTree = "<group>"; };
+		28D75BCA5677032AD4DFF12F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsView.swift"; sourceTree = "<group>"; };
+		52606AD54B5D233086AE504B /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WelcomeView.swift"; sourceTree = "<group>"; };
+		580B7AA5BF4E97323DA6ACF4 /* CommandHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandHistory.swift"; sourceTree = "<group>"; };
+		275CCF1F3AA70B80342B61C1 /* EngineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EngineProtocol.swift"; sourceTree = "<group>"; };
+		E034BCF1E391B4C8D6CA64BD /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SharedModels.swift"; sourceTree = "<group>"; };
+		CE3AD425C040A620ED8B2CCF /* SettingsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsKeys.swift"; sourceTree = "<group>"; };
+		DE1F27660E7B12A208ABB425 /* Camera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Camera.swift"; sourceTree = "<group>"; };
+		6113FE979560419DE4DA38C1 /* CascadeMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CascadeMetalView.swift"; sourceTree = "<group>"; };
+		FB2832F9925C34934165BA92 /* MeshBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeshBuffer.swift"; sourceTree = "<group>"; };
+		E37E3031BB95344C6955ECEB /* Renderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Renderer.swift"; sourceTree = "<group>"; };
+		A541D50550CEACC7F3A9E026 /* SceneStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SceneStore.swift"; sourceTree = "<group>"; };
+		80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewCommands.swift"; sourceTree = "<group>"; };
+		E632BCF1CBCAB36F1726BDEC /* ViewerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewerBridge.swift"; sourceTree = "<group>"; };
+		837DED834ACEE9B0A65D36F2 /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = "Shaders.metal"; sourceTree = "<group>"; };
+		8A3D93E007D38727A5CCD71B /* catalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catalog.json"; sourceTree = "<group>"; };
+		0DFF00CE78206D6F20EF4348 /* welcome.cascade */ = {isa = PBXFileReference; lastKnownFileType = text; path = "welcome.cascade"; sourceTree = "<group>"; };
+		12B04C8E8482C1837C5B6797 /* sample-project.cascade */ = {isa = PBXFileReference; lastKnownFileType = text; path = "sample-project.cascade"; sourceTree = "<group>"; };
+		D7622C242FF9F440B225C98C /* OCCT-LGPL-2.1.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OCCT-LGPL-2.1.txt"; sourceTree = "<group>"; };
+		FD2FE2F1EA4E1E7371D7D9BC /* OCCT-LGPL-EXCEPTION.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OCCT-LGPL-EXCEPTION.txt"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E70DC6C647540B657A5F42D3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5D0BBCFA994A6D52EF5D7E78 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				231870B807BB763715D62925 /* AppState.swift */,
+				8D04909D81C630A396BC2EEC /* ExampleScript.swift */,
+			);
+			path = "Models";
+			sourceTree = "<group>";
+		};
+		641660BBC62D222126539385 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				2DADA8A7ACEB88BC83D56E72 /* FileStore.swift */,
+			);
+			path = "Services";
+			sourceTree = "<group>";
+		};
+		C06EE5068A62C49E437DE99D /* Viewer */ = {
+			isa = PBXGroup;
+			children = (
+				FEED642D631F79192C05FE86 /* ViewerBridge.swift */,
+				D67C66DB77B8C46C6CE05858 /* ViewportPlaceholderView.swift */,
+			);
+			path = "Viewer";
+			sourceTree = "<group>";
+		};
+		BC9C0F4B1088144347CCAA29 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A0B6AA9A1520F335A6168D54 /* ConsoleView.swift */,
+				D1405B8BDBEA8BADDC2CC792 /* ContentView.swift */,
+				D6EE8E0CA29413B891C44EF6 /* FileBrowserView.swift */,
+				538584395A63FA571433493F /* GlassStyle.swift */,
+				8E1F180B8BD186E8D481B7B8 /* ObjectListView.swift */,
+				28D75BCA5677032AD4DFF12F /* SettingsView.swift */,
+				52606AD54B5D233086AE504B /* WelcomeView.swift */,
+			);
+			path = "Views";
+			sourceTree = "<group>";
+		};
+		3E951D38CE4479D37DD8DFC3 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				C6BE564ED39E39EB0C0FE034 /* CascadeConsoleApp.swift */,
+				5D0BBCFA994A6D52EF5D7E78 /* Models */,
+				641660BBC62D222126539385 /* Services */,
+				C06EE5068A62C49E437DE99D /* Viewer */,
+				BC9C0F4B1088144347CCAA29 /* Views */,
+			);
+			path = "Sources";
+			sourceTree = "<group>";
+		};
+		E703CD878ED8DA337FF15017 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				0DFF00CE78206D6F20EF4348 /* welcome.cascade */,
+				12B04C8E8482C1837C5B6797 /* sample-project.cascade */,
+			);
+			path = "Resources";
+			sourceTree = "<group>";
+		};
+		CB719A6DDAE7311B6322D77E /* Console */ = {
+			isa = PBXGroup;
+			children = (
+				580B7AA5BF4E97323DA6ACF4 /* CommandHistory.swift */,
+			);
+			path = "Console";
+			sourceTree = "<group>";
+		};
+		2D1BA25FFCD5EECFCFE5F5BC /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				275CCF1F3AA70B80342B61C1 /* EngineProtocol.swift */,
+			);
+			path = "Engine";
+			sourceTree = "<group>";
+		};
+		A5B4047FDFBFAC5511CE65B3 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				E034BCF1E391B4C8D6CA64BD /* SharedModels.swift */,
+			);
+			path = "Models";
+			sourceTree = "<group>";
+		};
+		F587AA3BA1A8AA5E809DA0BC /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				CE3AD425C040A620ED8B2CCF /* SettingsKeys.swift */,
+			);
+			path = "Settings";
+			sourceTree = "<group>";
+		};
+		F3324BA22340016A37D1693C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				8A3D93E007D38727A5CCD71B /* catalog.json */,
+			);
+			path = "Resources";
+			sourceTree = "<group>";
+		};
+		D19212C5AB1839E17ACDB89B /* Swift */ = {
+			isa = PBXGroup;
+			children = (
+				DE1F27660E7B12A208ABB425 /* Camera.swift */,
+				6113FE979560419DE4DA38C1 /* CascadeMetalView.swift */,
+				FB2832F9925C34934165BA92 /* MeshBuffer.swift */,
+				E37E3031BB95344C6955ECEB /* Renderer.swift */,
+				A541D50550CEACC7F3A9E026 /* SceneStore.swift */,
+				80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */,
+				E632BCF1CBCAB36F1726BDEC /* ViewerBridge.swift */,
+			);
+			path = "Swift";
+			sourceTree = "<group>";
+		};
+		10E1327ACD2EEEEDD9E90C94 /* Shaders */ = {
+			isa = PBXGroup;
+			children = (
+				837DED834ACEE9B0A65D36F2 /* Shaders.metal */,
+			);
+			path = "Shaders";
+			sourceTree = "<group>";
+		};
+		D8214CD24BB9DD7297AE46BF /* Viewer */ = {
+			isa = PBXGroup;
+			children = (
+				D19212C5AB1839E17ACDB89B /* Swift */,
+				10E1327ACD2EEEEDD9E90C94 /* Shaders */,
+			);
+			path = "Viewer";
+			sourceTree = "<group>";
+		};
+		60C8438EDB8E4D79726F13CA /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				CB719A6DDAE7311B6322D77E /* Console */,
+				2D1BA25FFCD5EECFCFE5F5BC /* Engine */,
+				A5B4047FDFBFAC5511CE65B3 /* Models */,
+				F587AA3BA1A8AA5E809DA0BC /* Settings */,
+				F3324BA22340016A37D1693C /* Resources */,
+				D8214CD24BB9DD7297AE46BF /* Viewer */,
+			);
+			path = "../../Shared";
+			sourceTree = "<group>";
+		};
+		674C63FC7D8FE9627A12D3B6 /* Licenses */ = {
+			isa = PBXGroup;
+			children = (
+				D7622C242FF9F440B225C98C /* OCCT-LGPL-2.1.txt */,
+				FD2FE2F1EA4E1E7371D7D9BC /* OCCT-LGPL-EXCEPTION.txt */,
+			);
+			path = "../../Licenses";
+			sourceTree = "<group>";
+		};
+		1A1C618AA1049B832F7CB864 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E1ABC9AD5577FA6363DF72E7 /* CascadeConsole.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E64DC61134598D5F0C156E0D /* Main */ = {
+			isa = PBXGroup;
+			children = (
+				3E951D38CE4479D37DD8DFC3 /* Sources */,
+				E703CD878ED8DA337FF15017 /* Resources */,
+				60C8438EDB8E4D79726F13CA /* Shared */,
+				674C63FC7D8FE9627A12D3B6 /* Licenses */,
+				1A1C618AA1049B832F7CB864 /* Products */,
+			);
+			name = Main;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E55714C6E631BE975EDCF73 /* CascadeConsole */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CDAC00DC53FBA55FB1A6BDFA /* Build configuration list for PBXNativeTarget "CascadeConsole" */;
+			buildPhases = (
+				BC5AD1030538F9AA7A206AC3 /* Sources */,
+				E70DC6C647540B657A5F42D3 /* Frameworks */,
+				0843262B286D83C6D79025B5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CascadeConsole;
+			productName = CascadeConsole;
+			productReference = E1ABC9AD5577FA6363DF72E7 /* CascadeConsole.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3596EE88CA3E55EEB21EEE00 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					0E55714C6E631BE975EDCF73 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = D1AA8FE3808B28EE9675B49A /* Build configuration list for PBXProject "CascadeConsole" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E64DC61134598D5F0C156E0D /* Main */;
+			productRefGroup = 1A1C618AA1049B832F7CB864 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0E55714C6E631BE975EDCF73 /* CascadeConsole */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0843262B286D83C6D79025B5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6DF93C9E313C10C833F14F92 /* catalog.json in Resources */,
+				DB63955F27590181CFC37668 /* welcome.cascade in Resources */,
+				A7FAB19D88B2D21AF3CA30B0 /* sample-project.cascade in Resources */,
+				BD35DF139F2623E849CAE369 /* OCCT-LGPL-2.1.txt in Resources */,
+				BC05DFDD3158E1DB4199C6C5 /* OCCT-LGPL-EXCEPTION.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BC5AD1030538F9AA7A206AC3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2FC2C2DFD44B974DB24764A /* CascadeConsoleApp.swift in Sources */,
+				54D9FD24A38BFF0B7DB64CC8 /* AppState.swift in Sources */,
+				E9F30B3E49278C1D3FEBABDE /* ExampleScript.swift in Sources */,
+				064C0C022BED2239ACC507CF /* FileStore.swift in Sources */,
+				64FF6FD35A59989E73977F96 /* ViewerBridge.swift in Sources */,
+				13092A651A80BD3C5458D2EA /* ViewportPlaceholderView.swift in Sources */,
+				421B05D570A58899A22DE859 /* ConsoleView.swift in Sources */,
+				80FF12993149F283914AA030 /* ContentView.swift in Sources */,
+				9CF6A56E4B79E7D7252D3A3C /* FileBrowserView.swift in Sources */,
+				4E858BF5DC6659B6D0535FA7 /* GlassStyle.swift in Sources */,
+				FFD794A445529F63BC3EA2A5 /* ObjectListView.swift in Sources */,
+				F9DF072A96F7EAF07BE82B2D /* SettingsView.swift in Sources */,
+				68B8018768BB4E4BB0C0A314 /* WelcomeView.swift in Sources */,
+				36D8F1638018DBF319BA075F /* CommandHistory.swift in Sources */,
+				479A75783B61FAD45CB253A0 /* EngineProtocol.swift in Sources */,
+				B75E6D6C17619AC39CAB1D1B /* SharedModels.swift in Sources */,
+				92535D1FFEB47A8C00AE20E0 /* SettingsKeys.swift in Sources */,
+				9EB2739DB5B7C8148E819D04 /* Camera.swift in Sources */,
+				CA56389D445433F9784790FA /* CascadeMetalView.swift in Sources */,
+				4CA828D2029ED93F507E54CB /* MeshBuffer.swift in Sources */,
+				B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */,
+				738671A8703034CAE1F7D60D /* SceneStore.swift in Sources */,
+				461CDBA82AC4277FDB20D6E9 /* ViewCommands.swift in Sources */,
+				D70372D4EE9FE86D52566BA0 /* ViewerBridge.swift in Sources */,
+				3062E72D41E5A106F798260D /* Shaders.metal in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		50DC4FB5B83869C66505681C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFS_ARE_BROKEN = NO;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				SWIFT_VERSION = 5.0;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = "DEBUG=1 $(inherited)";
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		45DF1FACDDD9D6739A3A9AD1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFS_ARE_BROKEN = NO;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				SWIFT_VERSION = 5.0;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		808673DB93BF6A2ADC54D5D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "";
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		DAE6817BAF67971B4F045111 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "";
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		D1AA8FE3808B28EE9675B49A /* Build configuration list for PBXProject "CascadeConsole" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				50DC4FB5B83869C66505681C /* Debug */,
+				45DF1FACDDD9D6739A3A9AD1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CDAC00DC53FBA55FB1A6BDFA /* Build configuration list for PBXNativeTarget "CascadeConsole" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				808673DB93BF6A2ADC54D5D9 /* Debug */,
+				DAE6817BAF67971B4F045111 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 3596EE88CA3E55EEB21EEE00 /* Project object */;
+}

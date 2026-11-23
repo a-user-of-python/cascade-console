@@ -23,7 +23,7 @@ struct ViewportPlaceholderView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
-                Text("Metal viewer by Agent 5 plugs in here via CascadeViewerBridging.")
+                Text("The Metal viewer (Shared/Viewer) plugs in here via the ViewerBridge protocol.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)

@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Settings screen. Every control is backed by real @AppStorage state
-/// (keys in SettingsStore.swift) and takes effect immediately.
+/// (canonical keys in Shared/Settings/SettingsKeys.swift) and takes
+/// effect immediately.
 struct SettingsView: View {
     @AppStorage(SettingsKeys.units) private var unitsRaw = LengthUnit.mm.rawValue
     @AppStorage(SettingsKeys.tessellationQuality)

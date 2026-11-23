@@ -1,4 +1,10 @@
-# Cascade Console — iOS / iPad App (Agent 4 scaffold)
+# Cascade Console — iOS / iPad App
+
+**Xcode project:** `CascadeConsole.xcodeproj` in this folder (target
+`CascadeConsole`, bundle id `com.user.cascadeconsole`, iPad only,
+deployment target iOS 17.0, shared scheme `CascadeConsole`). It builds
+against the Swift `StubEngine` in `Shared/Engine/` — the native OCCT
+Layer-2 library does not exist yet (TODO in project.pbxproj).
 
 iPad-first SwiftUI scaffold for the text-command Open CASCADE CAD app.
 Target device used for layout decisions: iPad Air M3, 11-inch, 1180x820 pt
@@ -13,20 +19,18 @@ landscape. Also runs on iPhone (compact layout collapses to tabs).
 ## Layout of this folder
 
 ```
-iOSApp/
+Apps/iPad/
   README.md                         (this file)
+  CascadeConsole.xcodeproj          target CascadeConsole (see above)
   Sources/
     CascadeConsoleApp.swift         @main entry, scene + first-launch seeding
     Models/
       AppState.swift                ObservableObject: log, objects, selection
-      CommandModels.swift           CommandResult, LogEntry, SceneObjectItem
       ExampleScript.swift           Welcome script + sample project (strings)
     Services/
-      SettingsStore.swift           @AppStorage keys + defaults
       FileStore.swift               Documents-folder store (picker-independent)
-      EngineBridge.swift            Protocol + stub for Agent 2's OCCT facade
     Viewer/
-      ViewerBridge.swift            Protocol + placeholder bridge (Agent 5)
+      ViewerBridge.swift            Placeholder bridge (Agent 5 adapter)
       ViewportPlaceholderView.swift SwiftUI placeholder conforming to bridge
     Views/
       ContentView.swift             Split layout (iPad) / tab layout (compact)
@@ -41,9 +45,14 @@ iOSApp/
     sample-project.cascade          Same sample project, as a plain file
 ```
 
-In Xcode: create an iOS App (SwiftUI, Swift) target named `CascadeConsole`,
-delete the template `App`/`ContentView`, and add everything under `Sources/`
-to the target. No third-party packages are required by this scaffold.
+The target also compiles the canonical Shared core from `../../Shared/`
+(models, settings keys, engine protocol + StubEngine, command history,
+the Metal viewer Swift + `Shaders.metal`) and bundles
+`Shared/Resources/catalog.json` plus the OCCT licence texts as
+resources. The per-app model/engine/settings files that used to live
+here were deleted at build time — they duplicated the Shared types in
+the same module (see the repo-root FIXLOG.md). No third-party packages
+are required.
 
 ## UI structure
 
@@ -82,26 +91,29 @@ stays reachable through the in-app browser afterwards.
 ## Connection points
 
 ### Agent 2 — core OCCT facade
-- `Services/EngineBridge.swift` defines `CascadeEngineFacing`:
-  `execute(command:) async -> CommandResult`, plus `executeScript(_:)`.
-- Today it is satisfied by `StubEngine`, which handles `help`, `clear`,
-  `echo` locally and otherwise reports that the OCCT core is not linked.
-  **No fake geometry is ever produced.**
-- To link the real core: add Agent 2's C facade (`cascade_core.h` /
-  static library) via a bridging header or a Swift package with a
-  C target, implement `OCCTEngine: CascadeEngineFacing` calling the
-  facade, and change one line in `CascadeConsoleApp.swift`
-  (`engine: OCCTEngine()` instead of `StubEngine()`).
+- `Shared/Engine/EngineProtocol.swift` defines the unified
+  `CascadeEngine` protocol: `execute(command:) async -> CommandResult`,
+  plus `executeScript(_:)` and `knownCommands` (from catalog.json).
+- Today it is satisfied by the Shared `StubEngine`, which handles
+  `help`, `clear`, `echo` locally and otherwise answers
+  NOT_IMPLEMENTED (E5002 / CC-SYS-000). **No fake geometry is ever
+  produced.**
+- To link the real core: add Agent 2's C facade (bridging header /
+  C Swift package target), implement `OCCTEngine: CascadeEngine`
+  calling the facade, and change one line in
+  `CascadeConsoleApp.swift` (`engine: OCCTEngine()` instead of
+  `StubEngine()`).
 - Shape results should come back as opaque shape IDs (strings) in
   `CommandResult.producedShapeIDs`; `AppState` turns them into
   `SceneObjectItem`s and forwards them to the viewer bridge.
 
 ### Agent 5 — Metal viewer
-- `Viewer/ViewerBridge.swift` defines `CascadeViewerBridging`:
-  `displayObject(id:name:)`, `removeObject(id:)`, `clearScene()`,
-  `fitAll()`, `setWireframe(_:)`, and an `onObjectPicked` callback —
-  intentionally mirroring the Mac app's bridge in spirit (UUID + name,
-  imperative display calls, pick callback into SwiftUI state).
+- `Viewer/ViewerBridge.swift` keeps only `PlaceholderViewerBridge`
+  (the normative protocol is Agent 5's `ViewerBridge` in
+  `Shared/Viewer/Swift/ViewerBridge.swift`, implemented by
+  `CascadeRenderer`): `displayObject(id:name:)`, `removeObject(id:)`,
+  `clearScene()`, `fitAll()`, `setWireframe(_:)`, and an
+  `onObjectPicked` callback.
 - `PlaceholderViewerBridge` + `ViewportPlaceholderView` satisfy it now:
   a labelled placeholder with grid backdrop, object count, Fit / Wireframe
   buttons wired to the bridge (so wiring is testable before Metal lands).
@@ -110,12 +122,14 @@ stays reachable through the in-app browser afterwards.
   same bridge object from `AppState.viewer`, done.
 
 ### Settings
-`SettingsStore.swift` is the single source of `@AppStorage` keys:
+`Shared/Settings/SettingsKeys.swift` is the single source of
+`@AppStorage` keys (canonical `cc.*` scheme for both apps):
 `units` (mm/cm/inch), `tessellationQuality` (low/medium/high/fine),
 `appearance` (system/light/dark), `highContrast` (bool), `autosave`
-(bool), `autosaveIntervalMinutes`, `consoleFontSizeStep` (relative step,
-not a fixed size), `showTimestamps`, `confirmBeforeClear`. The engine
-bridge and viewer should read tessellation/units from here at call time.
+(bool), `autosaveIntervalMinutes`, `consoleFontSize` (points) and
+`consoleFontSizeStep` (the iPad's relative step), `showTimestamps`,
+`confirmBeforeClear`. The engine and viewer should read
+tessellation/units from here at call time.
 
 ## First launch
 

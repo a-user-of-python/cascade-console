@@ -23,6 +23,7 @@ public enum SettingsKeys {
     public static let autosave = "cc.autosave"                  // Bool
     public static let autosaveIntervalMinutes = "cc.autosaveMinutes" // Int
     public static let consoleFontSize = "cc.consoleFontSize"    // Double (points)
+    public static let consoleFontSizeStep = "cc.consoleFontSizeStep" // Int (iPad relative step, -1...1)
     public static let keepLogLines = "cc.keepLogLines"          // Int
     // Keys that originated in the iPad scaffold:
     public static let showTimestamps = "cc.showTimestamps"      // Bool
