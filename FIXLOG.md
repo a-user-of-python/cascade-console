@@ -441,3 +441,8 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   restored to the protocol's, deflection fixed at 0.5 mm inside.
   (b) Renderer.updateFaceLabels used `let host = view.layer` in a
   guard; MTKView.layer is non-optional on iOS — split the binding.
+- CI fix 8 (IPA app link, run 45282966795): Swift compiled fully;
+  the link failed on one undefined symbol, ccsim::execute — the
+  engine-library step compiled all five objects but its `ar` line
+  still archived only cc_interpreter.o + ccgeom_mc.o (the line
+  predated the sim integration). All five objects are now archived.

@@ -109,7 +109,7 @@ jobs:
               -Icascade-port-src/Facade \
               -c "Core/native/src/$src.cpp" -o "build/$src.o"
           done
-          ar rcs build/libCascadeConsoleEngine.a build/cc_interpreter.o build/ccgeom_mc.o
+          ar rcs build/libCascadeConsoleEngine.a build/cc_interpreter.o build/ccgeom_mc.o build/ccsim.o build/ccsim_commands.o build/ccsim_backend_mc.o
           echo "Layer-2 symbols in libCascadeConsoleEngine.a:"
           nm build/libCascadeConsoleEngine.a | grep -E "cc_execute|mc_clone_shape" || true
 
