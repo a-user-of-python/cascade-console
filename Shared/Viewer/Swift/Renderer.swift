@@ -168,7 +168,7 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
     }
 
     public func updateObjectProps(id: String, props: ObjectDisplayProps) {
-        store.entries[id]?.props = props
+        store.setProps(id: id, props: props)
     }
 
     public func removeObject(id: String) {
@@ -232,11 +232,11 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
         case .setProjection(let mode):
             store.camera.projection = mode
         case .setObjectVisible(let id, let on):
-            store.entries[id]?.props.isVisible = on
+            store.mutateProps(id: id) { $0.isVisible = on }
         case .setObjectOpacity(let id, let value):
-            store.entries[id]?.props.opacity = min(1, max(0, value))
+            store.mutateProps(id: id) { $0.opacity = min(1, max(0, value)) }
         case .setObjectColor(let id, let color):
-            store.entries[id]?.props.color = color
+            store.mutateProps(id: id) { $0.color = color }
         case .resetCamera:
             store.camera = OrbitCamera()
             store.fitCamera()
@@ -247,10 +247,12 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
     // MARK: GPU upload (once per geometry version)
 
     private func upload(_ object: MeshObject) {
-        let vData = object.vertices.withUnsafeBytes { Data($0) }
-        let iData = object.indices.withUnsafeBytes { Data($0) }
-        guard let vb = device.makeBuffer(bytes: vData, length: vData.count, options: .storageModeShared),
-              let ib = device.makeBuffer(bytes: iData, length: iData.count, options: .storageModeShared)
+        // makeBuffer(bytes:) takes an UnsafeRawPointer, not a Data -
+        // pass each array's raw base address straight through.
+        guard let vb = object.vertices.withUnsafeBytes({ raw in
+                  device.makeBuffer(bytes: raw.baseAddress!, length: raw.count, options: .storageModeShared) }),
+              let ib = object.indices.withUnsafeBytes({ raw in
+                  device.makeBuffer(bytes: raw.baseAddress!, length: raw.count, options: .storageModeShared) })
         else {
             delegate?.viewer(self, didFailWith: "Metal buffer allocation failed for \(object.id)")
             return

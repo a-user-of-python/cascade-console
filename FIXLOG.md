@@ -193,3 +193,26 @@ not an exclusion: Apps/iPad/Sources/Viewer/ViewerBridge.swift ->
 PlaceholderViewerBridge.swift, with the pbxproj fileRef/buildFile
 entries (IDs FEED642D…, 64FF6FD3…) and Apps/iPad/README.md updated.
 The Shared ViewerBridge.swift is untouched.
+
+### F7 — Shared viewer Swift compile errors (IPA run 45244853609, 39 errors in 2 files)
+Real compilation started after F6. Three root causes:
+1. ViewCommands.swift (33 errors): the parser declared
+   `Result<ViewerCommand, String>` — String does not conform to
+   `Error`, so the Result type itself was invalid and every
+   `.success(.fit)` / `.displayMode(...)` etc. lost its contextual
+   type ("cannot infer contextual base"). Fix: new
+   `ViewCommandParseError: Error` struct carrying `message`; the
+   parser returns Result<ViewerCommand, ViewCommandParseError> and
+   all 15 failure sites wrap their message. No in-repo callers used
+   the String form (checked), and the console-facing message text
+   is unchanged.
+2. Renderer.swift (4 errors): it assigned `store.entries[id]?.props…`
+   but SceneStore.entries is `private(set)`. Fix: SceneStore gained
+   `setProps(id:props:)` and `mutateProps(id:_:)`; the Renderer now
+   calls those for updateObjectProps and the setObjectVisible /
+   setObjectOpacity / setObjectColor commands. Reads of entries
+   (props query, draw loop) are unchanged.
+3. Renderer.swift (2 errors): `makeBuffer(bytes: vData)` was handed a
+   `Data`; the API takes UnsafeRawPointer. Fix: buffers are created
+   directly inside each array's withUnsafeBytes from its raw base
+   address and byte count.

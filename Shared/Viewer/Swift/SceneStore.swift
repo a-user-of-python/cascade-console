@@ -58,6 +58,22 @@ public final class SceneStore {
         return true
     }
 
+    /// Replace the display props of one entry. `entries` is
+    /// private(set), so outside owners (the Renderer) mutate display
+    /// state through here instead of writing `entries[id]?.props`
+    /// directly, which the access control rightly rejects.
+    public func setProps(id: String, props: ObjectDisplayProps) {
+        entries[id]?.props = props
+    }
+
+    /// Mutate one entry's display props in place (visibility, opacity,
+    /// colour) without touching its geometry.
+    public func mutateProps(id: String, _ change: (inout ObjectDisplayProps) -> Void) {
+        guard var entry = entries[id] else { return }
+        change(&entry.props)
+        entries[id] = entry
+    }
+
     public func remove(id: String) {
         entries[id] = nil
         order.removeAll { $0 == id }

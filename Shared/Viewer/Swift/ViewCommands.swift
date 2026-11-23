@@ -31,13 +31,23 @@
 import Foundation
 import simd
 
+/// Parse failure for a `view ...` line. `Result`'s failure type must
+/// conform to `Error`, which `String` does not - the parser originally
+/// used a plain String as its failure type, which does not type-check
+/// and cascaded into every `.success(...)` case in the parser. The
+/// console shows `message` verbatim, exactly as before.
+public struct ViewCommandParseError: Error, Equatable {
+    public let message: String
+    public init(_ message: String) { self.message = message }
+}
+
 public enum ViewCommandParser {
-    public static func parse(_ rawLine: String) -> Result<ViewerCommand, String> {
+    public static func parse(_ rawLine: String) -> Result<ViewerCommand, ViewCommandParseError> {
         var tokens = rawLine.trimmingCharacters(in: .whitespaces)
             .split(separator: " ", omittingEmptySubsequences: true)
             .map(String.init)
         guard tokens.count >= 2, tokens[0].lowercased() == "view" else {
-            return .failure("not a view command")
+            return .failure(ViewCommandParseError("not a view command"))
         }
         tokens.removeFirst() // "view"
         let head = tokens[0].lowercased()
@@ -91,10 +101,10 @@ public enum ViewCommandParser {
                 return .success(.setSection(SectionPlane(
                     normal: SIMD3<Float>(nx, ny, nz), constant: c)))
             }
-            return .failure("usage: view section off | view section x|y|z <distance> | view section <nx> <ny> <nz> <constant>")
+            return .failure(ViewCommandParseError("usage: view section off | view section x|y|z <distance> | view section <nx> <ny> <nz> <constant>"))
         case "explode":
             guard args.count == 1, let f = Float(args[0]), (0...2).contains(f) else {
-                return .failure("usage: view explode <factor 0...2>")
+                return .failure(ViewCommandParseError("usage: view explode <factor 0...2>"))
             }
             return .success(.setExplode(factor: f))
         case "screenshot", "render":
@@ -106,55 +116,55 @@ public enum ViewCommandParser {
             return .success(.screenshot(path: path, width: width, height: height))
         case "measure":
             guard let first = args.first?.lowercased() else {
-                return .failure("usage: view measure on|off|clear")
+                return .failure(ViewCommandParseError("usage: view measure on|off|clear"))
             }
             if first == "clear" { return .success(.clearMeasure) }
             guard let on = onOff(first) else {
-                return .failure("usage: view measure on|off|clear")
+                return .failure(ViewCommandParseError("usage: view measure on|off|clear"))
             }
             return .success(.setMeasureEnabled(on))
         case "grid":
             guard let on = onOff(args.first) else {
-                return .failure("usage: view grid on|off")
+                return .failure(ViewCommandParseError("usage: view grid on|off"))
             }
             return .success(.setGridVisible(on))
         case "axes":
             guard let on = onOff(args.first) else {
-                return .failure("usage: view axes on|off")
+                return .failure(ViewCommandParseError("usage: view axes on|off"))
             }
             return .success(.setAxesVisible(on))
         case "background", "bg":
             guard args.count == 2, let top = hexColor(args[0]),
                   let bottom = hexColor(args[1]) else {
-                return .failure("usage: view background <top RRGGBB> <bottom RRGGBB>")
+                return .failure(ViewCommandParseError("usage: view background <top RRGGBB> <bottom RRGGBB>"))
             }
             return .success(.setBackground(top: top, bottom: bottom))
         case "projection":
             guard let mode = args.first?.lowercased(),
                   mode == "ortho" || mode == "perspective" else {
-                return .failure("usage: view projection ortho|perspective")
+                return .failure(ViewCommandParseError("usage: view projection ortho|perspective"))
             }
             return .success(.setProjection(mode == "ortho" ? .orthographic : .perspective))
         case "hide":
-            guard let id = args.first else { return .failure("usage: view hide <object>") }
+            guard let id = args.first else { return .failure(ViewCommandParseError("usage: view hide <object>")) }
             return .success(.setObjectVisible(id: id, false))
         case "show":
-            guard let id = args.first else { return .failure("usage: view show <object>") }
+            guard let id = args.first else { return .failure(ViewCommandParseError("usage: view show <object>")) }
             return .success(.setObjectVisible(id: id, true))
         case "opacity":
             guard args.count == 2, let v = Float(args[1]), (0...1).contains(v) else {
-                return .failure("usage: view opacity <object> <0...1>")
+                return .failure(ViewCommandParseError("usage: view opacity <object> <0...1>"))
             }
             return .success(.setObjectOpacity(id: args[0], v))
         case "color", "colour":
             guard args.count == 2, let c = hexColor(args[1]) else {
-                return .failure("usage: view color <object> <RRGGBB>")
+                return .failure(ViewCommandParseError("usage: view color <object> <RRGGBB>"))
             }
             return .success(.setObjectColor(id: args[0], c))
         case "reset":
             return .success(.resetCamera)
         default:
-            return .failure("unknown view command '\(head)' - try view fit, view iso, view wireframe, view section, view explode, view screenshot, view measure, view grid, view projection")
+            return .failure(ViewCommandParseError("unknown view command '\(head)' - try view fit, view iso, view wireframe, view section, view explode, view screenshot, view measure, view grid, view projection"))
         }
     }
 
