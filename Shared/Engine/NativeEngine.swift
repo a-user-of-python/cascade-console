@@ -54,7 +54,7 @@ public final class NativeEngine: CascadeEngine, EngineViewDataProviding {
          "fillet", "chamfer", "translate", "rotate", "copy", "duplicate",
          "rename", "delete", "clear", "list", "info", "volume",
          "measure-volume", "undo", "redo", "history", "shape-history",
-         "export", "export-step", "export-stl", "view", "run", "echo", "help"]
+         "export", "export-step", "export-stl", "view", "run", "echo", "help", "sim"]
     }
 
     public func execute(command: String) async -> CommandResult {
@@ -119,11 +119,21 @@ public final class NativeEngine: CascadeEngine, EngineViewDataProviding {
                     let d = objects[i]
                     let verts = (0..<Int(d.vertexCount) * 3).map { d.vertices[$0] }
                     let idx = (0..<Int(d.triangleCount) * 3).map { d.indices[$0] }
+                    var ranges: [EngineViewObject.FaceRange] = []
+                    if let fr = d.faceRanges {
+                        for j in 0..<Int(d.faceRangeCount) {
+                            ranges.append(EngineViewObject.FaceRange(
+                                faceIndex: fr[j].faceIndex,
+                                indexStart: fr[j].indexStart,
+                                indexCount: fr[j].indexCount))
+                        }
+                    }
                     result.append(EngineViewObject(
                         name: String(cString: d.name),
                         vertices: verts, indices: idx,
                         volume: d.volume,
-                        bbox: [d.bbox.0, d.bbox.1, d.bbox.2, d.bbox.3, d.bbox.4, d.bbox.5]))
+                        bbox: [d.bbox.0, d.bbox.1, d.bbox.2, d.bbox.3, d.bbox.4, d.bbox.5],
+                        faceRanges: ranges))
                 }
                 cc_free_view_data(objects, count)
                 continuation.resume(returning: result)

@@ -245,3 +245,24 @@ int ccgeom_export_stl(CCGeomShape* s, const char* path, int* err) {
 }
 
 void* ccgeom_native_handle(CCGeomShape*) { return nullptr; }  // mock has no native handle
+
+int ccgeom_face_ranges(CCGeomShape* s, double,
+                       CCGeomFaceRange** outRanges, int* outCount, int* err) {
+  if (!s) return setErr(err, CCGEOM_ERR_INVALID_ARG, "mock face_ranges: null");
+  // The mock tessellation is a bounding-box placeholder with 12
+  // triangles in fixed order: 2 per box face (z-min, z-max, y-min,
+  // x-max, y-max, x-min). For a 6-face shape the ranges below are the
+  // honest slices of THAT placeholder; for anything else the mock
+  // cannot attribute triangles to faces and returns one range.
+  std::vector<CCGeomFaceRange> ranges;
+  if (s->faces == 6) {
+    for (int f = 0; f < 6; ++f) ranges.push_back(CCGeomFaceRange{f, f * 6, 6});
+  } else {
+    ranges.push_back(CCGeomFaceRange{0, 0, 36});
+  }
+  CCGeomFaceRange* buf = (CCGeomFaceRange*)std::malloc(ranges.size() * sizeof(CCGeomFaceRange));
+  if (!buf) return setErr(err, CCGEOM_ERR_OCCT, "mock face_ranges: out of memory");
+  std::memcpy(buf, ranges.data(), ranges.size() * sizeof(CCGeomFaceRange));
+  *outRanges = buf; *outCount = (int)ranges.size();
+  if (err) *err = CCGEOM_OK; return CCGEOM_OK;
+}

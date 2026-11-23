@@ -91,6 +91,21 @@ int ccgeom_tessellate(CCGeomShape* s, double deflectionMM,
                       float** outVertices, int* outVertexCount,
                       int** outIndices, int* outIndexCount, int* err);
 
+/// Per-face index ranges of the ccgeom_tessellate output, in the
+/// shape's census face order: faceIndex is the 0-based census index
+/// (the same index @face <n> references in fillet/sim commands), and
+/// [indexStart, indexStart+indexCount) is that face's slice of the
+/// tessellation index buffer. Every census face gets a range (a face
+/// with no triangulation gets indexCount 0), so the mapping is total.
+/// Heap array; free with ccgeom_free_buffer().
+typedef struct CCGeomFaceRange {
+  int faceIndex;
+  int indexStart;
+  int indexCount;
+} CCGeomFaceRange;
+int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
+                       CCGeomFaceRange** outRanges, int* outCount, int* err);
+
 // ---- export -----------------------------------------------------------------------------
 int ccgeom_export_step(CCGeomShape* s, const char* path, int* err);
 int ccgeom_export_stl(CCGeomShape* s, const char* path, int* err);

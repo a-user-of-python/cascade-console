@@ -101,6 +101,17 @@ final class AppState: ObservableObject {
             loadScriptFromDocuments(command: command)
             return
         }
+        if verb == "view", let renderer,
+           case .success(let viewCommand) = ViewCommandParser.parse(command) {
+            // Viewer commands (fit / standard views / display modes /
+            // labels / section / ...) belong to the renderer, not the
+            // engine. Anything the parser rejects — notably the
+            // engine's own `view <path.json> [name]` form — falls
+            // through to the engine unchanged.
+            renderer.apply(viewCommand)
+            appendLog(.info, "view: applied to the 3D viewer.")
+            return
+        }
 
         isRunning = true
         Task { @MainActor in

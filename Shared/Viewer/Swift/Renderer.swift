@@ -183,6 +183,14 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
         gridKey = ""
     }
 
+    /// Face-number labels (v0.2): when on, each face of each visible
+    /// object gets a text chip at its centroid showing its census
+    /// face index (MeshObject.faceGroups' sourceFaceIndex — the same
+    /// number @face <n> accepts). Default off. Overlay rendering is
+    /// iOS-only for now (see updateFaceLabels); the flag and command
+    /// work on both platforms.
+    public var faceLabelsEnabled: Bool = false
+
     public var objectIDs: [String] { store.order }
     public func props(id: String) -> ObjectDisplayProps? { store.entries[id]?.props }
     public var displayMode: DisplayMode { store.displayMode }
@@ -222,6 +230,8 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
         case .clearMeasure:
             store.clearMeasure()
             delegate?.viewer(self, measureDistanceChanged: nil)
+        case .setFaceLabelsEnabled(let on):
+            faceLabelsEnabled = on
         case .setGridVisible(let on):
             store.gridVisible = on
         case .setAxesVisible(let on):
@@ -516,5 +526,108 @@ extension CascadeRenderer: MTKViewDelegate {
         encoder.endEncoding()
         commandBuffer.present(drawable)
         commandBuffer.commit()
+        updateFaceLabels(in: view, viewProjection: vp)
     }
 }
+
+// MARK: - Face-number labels (v0.2)
+//
+// CATextLayer chips hosted on the MTKView's layer, repositioned every
+// frame from the same view-projection the renderer just drew with, so
+// they track orbit/zoom exactly. Anchors come from the MeshObject
+// face groups: centroid of the group's vertices, offset along the
+// group's mean normal. A label hides when its face points away from
+// the camera (dot(normal, viewDir) <= 0.15) or behind the camera.
+// Contrast per the user's vision needs: near-black text on a solid
+// near-white chip, 14 pt semibold — never small grey text.
+//
+// iOS only in this pass: on macOS the flag/command exist but no chips
+// are drawn (the Mac app does not use this renderer yet — see FIXLOG).
+
+#if os(iOS)
+import QuartzCore
+import UIKit
+
+private var faceLabelStorage: [ObjectIdentifier: [String: CATextLayer]] = [:]
+
+extension CascadeRenderer {
+    private var labelLayers: [String: CATextLayer] {
+        get { faceLabelStorage[ObjectIdentifier(self)] ?? [:] }
+        set { faceLabelStorage[ObjectIdentifier(self)] = newValue }
+    }
+
+    func updateFaceLabels(in view: MTKView, viewProjection vp: float4x4) {
+        var layers = labelLayers
+        guard faceLabelsEnabled else {
+            for (_, layer) in layers { layer.removeFromSuperlayer() }
+            labelLayers = [:]
+            return
+        }
+        let bounds = view.bounds
+        guard bounds.width > 0, bounds.height > 0, let host = view.layer else { return }
+        let eye = store.camera.eyePosition
+        var wanted: [String: (text: String, screen: CGPoint)] = [:]
+
+        for id in store.order {
+            guard let entry = store.entries[id], entry.props.isVisible else { continue }
+            let mesh = entry.mesh
+            let diag = simd_length(mesh.boundingBoxSize)
+            let lift = max(0.05, 0.015 * diag)
+            for group in mesh.faceGroups where group.vertexCount > 0 {
+                let start = Int(group.vertexStart)
+                let count = Int(group.vertexCount)
+                guard start + count <= mesh.vertices.count else { continue }
+                var centroid = SIMD3<Float>.zero
+                var normal = SIMD3<Float>.zero
+                for i in start..<(start + count) {
+                    centroid += mesh.vertices[i].position
+                    normal += mesh.vertices[i].normal
+                }
+                centroid /= Float(count)
+                let nlen = simd_length(normal)
+                guard nlen > 1e-6 else { continue }
+                normal /= nlen
+                let anchor = centroid + normal * lift
+                let viewDir = eye - anchor
+                guard simd_length(viewDir) > 1e-6,
+                      simd_dot(normal, simd_normalize(viewDir)) > 0.15 else { continue }
+                let clip = vp * SIMD4<Float>(anchor.x, anchor.y, anchor.z, 1)
+                guard clip.w > 0 else { continue }
+                let ndc = SIMD3<Float>(clip.x / clip.w, clip.y / clip.w, clip.z / clip.w)
+                guard ndc.z <= 1, abs(ndc.x) <= 1.1, abs(ndc.y) <= 1.1 else { continue }
+                let screen = CGPoint(x: CGFloat(ndc.x * 0.5 + 0.5) * bounds.width,
+                                     y: CGFloat(1 - (ndc.y * 0.5 + 0.5)) * bounds.height)
+                wanted["\(id)#\(group.sourceFaceIndex)"] =
+                    (text: "\(group.sourceFaceIndex)", screen: screen)
+            }
+        }
+
+        for (key, layer) in layers where wanted[key] == nil {
+            layer.removeFromSuperlayer()
+            layers[key] = nil
+        }
+        let font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        for (key, item) in wanted {
+            let layer = layers[key] ?? {
+                let l = CATextLayer()
+                l.alignmentMode = .center
+                l.cornerRadius = 4
+                l.contentsScale = view.contentScaleFactor
+                host.addSublayer(l)
+                layers[key] = l
+                return l
+            }()
+            layer.string = item.text
+            layer.font = font
+            layer.fontSize = 14
+            layer.foregroundColor = UIColor.black.cgColor
+            layer.backgroundColor = UIColor.white.withAlphaComponent(0.92).cgColor
+            let width = max(22, 12 + 9 * item.text.count)
+            layer.frame = CGRect(x: item.screen.x - CGFloat(width) / 2,
+                                 y: item.screen.y - 11,
+                                 width: CGFloat(width), height: 22)
+        }
+        labelLayers = layers
+    }
+}
+#endif

@@ -70,6 +70,13 @@ public enum ViewCommandParser {
         }
 
         switch head {
+        case "labels":
+            // view labels faces on|off
+            guard args.count == 2, args[0].lowercased() == "faces",
+                  let on = onOff(args[1]) else {
+                return .failure(ViewCommandParseError("usage: view labels faces on|off"))
+            }
+            return .success(.setFaceLabelsEnabled(on))
         case "fit":
             return .success(.fit)
         case "top", "bottom", "front", "back", "left", "right", "iso":

@@ -157,3 +157,25 @@ int ccgeom_export_stl(CCGeomShape* s, const char* path, int* err) {
 }
 
 void* ccgeom_native_handle(CCGeomShape* s) { return s ? (void*)s->h : nullptr; }
+
+int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
+                       CCGeomFaceRange** outRanges, int* outCount, int* err) {
+  // The facade mesh's per-face triangle ranges are in the same TopExp
+  // traversal order as the census (facade header, section 9), so
+  // range f IS census face f. Converted to index-element units.
+  MCFacadeMesh mesh{};
+  int e = MC_OK;
+  int rc = mc_tessellate(raw(s), deflectionMM, &mesh, &e);
+  if (e != MC_OK || rc != MC_OK) { if (err) *err = xlate(e); return xlate(e); }
+  CCGeomFaceRange* buf = (CCGeomFaceRange*)std::malloc((mesh.faceCount > 0 ? mesh.faceCount : 1) * sizeof(CCGeomFaceRange));
+  if (!buf) { mc_free_mesh(&mesh); if (err) *err = CCGEOM_ERR_OCCT; return CCGEOM_ERR_OCCT; }
+  for (int f = 0; f < mesh.faceCount; ++f) {
+    buf[f].faceIndex = f;
+    buf[f].indexStart = mesh.faceTriStart[f] * 3;
+    buf[f].indexCount = mesh.faceTriCount[f] * 3;
+  }
+  mc_free_mesh(&mesh);
+  *outRanges = buf; *outCount = mesh.faceCount;
+  if (err) *err = CCGEOM_OK;
+  return CCGEOM_OK;
+}

@@ -308,3 +308,70 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
 
 ## CI results
 <!-- filled in by the coordinator as runs complete -->
+
+## Simulation integrated (v0.2, per docs/SIM-INTEGRATION.md)
+- simwork module copied into Core/native (ccsim.h/ccsim_backend.h,
+  ccsim.cpp, ccsim_commands.cpp, ccsim_backend_mc.cpp,
+  ccsim_backend_mock.cpp, tests/test_sim.cpp + probe_cylinder.cpp,
+  build_sim.sh adapted to the repo layout). INTEGRATION.md preserved
+  at docs/SIM-INTEGRATION.md.
+- The OCCT sim backend was MERGED into ccgeom_occt.cpp as instructed
+  (same TU as CCGeomShape, sharing ccgeom_last_error()); its
+  standalone setErr shim was removed (it collided with the TU's own
+  setErr — caught by the host build, fixed before any CI run).
+- Interpreter registration exactly per INTEGRATION.md: ccsim::State
+  member on CCSession, SimHost adapter (object/num with CCError <->
+  ccsim::Error translation), one `sim` dispatch branch, sim help
+  lines; `sim` is NOT in mutatingCommands and sim state is NOT
+  snapshotted.
+- Host proof FROM THE REPO COPY: sim suite 35/35 on mock AND real
+  OCCT 8.0.1; engine suite unchanged (90 OCCT before label tests);
+  plus an end-to-end smoke through cc_execute (box -> sim material
+  steel -> fix @face 0 -> load @face 5 -> sim run solves the 640-
+  element cantilever; sim modal -> E5002). The Layer-2 CI library
+  and the ubuntu CI job now build/run the sim sources too.
+- The two optional facade additions (mc_point_face_distance,
+  mc_face_point_normal) were NOT added — the module ships without
+  them, with its documented mc-backend limitations (pressure on
+  non-planar faces fails loudly on device until they land).
+
+## Face-number labels (v0.2)
+- NUMBERING TRUTH: @face indices are the 0-based census indices
+  (facade section 8 census; sim INTEGRATION.md). Labels therefore
+  show 0..5 on a box — six labels, one per face, numbered as the
+  commands accept. (A "1..6" labelling would have made @face 1 fix
+  the face labelled 2 — rejected on the critical requirement.)
+- The view-data path did NOT carry face attribution: ccgeom_
+  tessellate appends triangles face by face in census order but
+  exported no ranges. Added ccgeom_face_ranges (all 3 backends:
+  OCCT re-walks the same TopExp map; mc converts the facade mesh's
+  faceTriStart/Count, which the facade header guarantees are in
+  census order; mock slices its documented box placeholder) ->
+  CCViewData.faceRanges -> EngineViewObject.faceRanges -> CCM1 face
+  groups with sourceFaceIndex = the census index. No renderer-side
+  guessing anywhere in the chain.
+- Host proof (tests/test_engine.cpp, OCCT backend): box ranges are
+  census-ordered, partition the index buffer exactly, every range's
+  centroid is a true box face centre (label anchors); demo part:
+  label count == cc_object_stats face count. Engine suite is now
+  100 pass / 0 fail on OCCT 8.0.1 (90 before), 90 on mock.
+- Rendering: `view labels faces on|off` (ViewCommands grammar,
+  default OFF) -> ViewerCommand.setFaceLabelsEnabled ->
+  CascadeRenderer.faceLabelsEnabled (also a ViewerBridge property
+  for a future UI switch). Chips are CATextLayers repositioned every
+  frame with the renderer's own view-projection: black 14 pt
+  semibold text on a white chip (high contrast), anchored at the
+  face centroid lifted along its normal, hidden when the face
+  points away (dot(normal, viewDir) <= 0.15) or behind the camera.
+- HONEST LIMITS: label overlay is iOS-only in this pass (macOS sets
+  the flag but draws no chips; the Mac app does not use this
+  renderer yet). AppState now routes parser-accepted `view …`
+  commands to the renderer; the engine's `view <path.json>` form
+  still falls through to the engine. An object literally named like
+  a viewer head word (e.g. "top") cannot be targeted by the
+  engine's bare `view <name>` form — parser heads win; documented
+  ambiguity, same as most CAD consoles.
+- CI fix: build_host.sh lost its exec bit in the API push (mode
+  100644) and the Native-engine ubuntu job failed with exit 126
+  (Permission denied) on the v0.2 push. Workflows now invoke the
+  scripts via `bash`, and pushes record mode 100755 for .sh files.

@@ -33,11 +33,11 @@ if [ ! -e "$OCCT_LIB/libTKSTEP.so" ] && [ -e "$OCCT_LIB/libTKDESTEP.so" ]; then
 fi
 
 echo "== mock backend =="
-$CXX $CXXFLAGS -DCC_MOCK src/cc_interpreter.cpp src/ccgeom_mock.cpp tests/test_engine.cpp -o build/test_engine_mock
+$CXX $CXXFLAGS -DCC_MOCK src/cc_interpreter.cpp src/ccgeom_mock.cpp src/ccsim.cpp src/ccsim_commands.cpp src/ccsim_backend_mock.cpp tests/test_engine.cpp -o build/test_engine_mock
 ./build/test_engine_mock mock
 
 echo "== OCCT backend =="
-$CXX $CXXFLAGS -I"$OCCT_INC" src/cc_interpreter.cpp src/ccgeom_occt.cpp tests/test_engine.cpp \
+$CXX $CXXFLAGS -I"$OCCT_INC" src/cc_interpreter.cpp src/ccgeom_occt.cpp src/ccsim.cpp src/ccsim_commands.cpp tests/test_engine.cpp \
   -L"$OCCT_LIB" -Wl,-rpath,"$OCCT_LIB" $TK_LIBS -lpthread -o build/test_engine_occt
 ./build/test_engine_occt occt
 
@@ -46,3 +46,5 @@ $CXX $CXXFLAGS -I"$HOME/workspace/cascade-port/Facade" -I src -c src/ccgeom_mc.c
   && echo "ccgeom_mc.cpp compiles against the real cascade-port occt_facade.h"
 
 echo "ALL HOST BUILDS DONE"
+$CXX $CXXFLAGS -I"$HOME/workspace/cascade-port/Facade" -I src -c src/ccsim_backend_mc.cpp -o build/ccsim_backend_mc.o \
+  && echo "ccsim_backend_mc.cpp compiles against the real cascade-port occt_facade.h"

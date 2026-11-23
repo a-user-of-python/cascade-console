@@ -87,6 +87,7 @@ public enum ViewerCommand: Equatable {
     case setAxesVisible(Bool)
     case setBackground(top: SIMD4<Float>, bottom: SIMD4<Float>)
     case setProjection(ProjectionMode)
+    case setFaceLabelsEnabled(Bool)     // face-number labels (v0.2)
     case setObjectVisible(id: String, Bool)
     case setObjectOpacity(id: String, Float)
     case setObjectColor(id: String, SIMD4<Float>)
@@ -127,6 +128,10 @@ public protocol ViewerBridge: AnyObject {
     func props(id: String) -> ObjectDisplayProps?
     /// Ray pick at a view-space point (points, origin top-left of view).
     func pick(at viewPoint: SIMD2<Float>, viewSize: SIMD2<Float>) -> PickResult?
+
+    /// Face-number labels on/off (default off). The numbers are the
+    /// census face indices carried in MeshObject.faceGroups.
+    var faceLabelsEnabled: Bool { get set }
 
     // Live view state, for the console's `view status` report
     var displayMode: DisplayMode { get }

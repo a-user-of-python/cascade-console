@@ -72,7 +72,7 @@ jobs:
         run: |
           SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
           mkdir -p build
-          for src in cc_interpreter ccgeom_mc; do
+          for src in cc_interpreter ccgeom_mc ccsim ccsim_commands ccsim_backend_mc; do
             clang++ -std=c++17 -O2 \
               -target arm64-apple-ios17.0 \
               -isysroot "$SDK_PATH" \

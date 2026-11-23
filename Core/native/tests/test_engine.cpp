@@ -256,6 +256,61 @@ int main(int argc, char** argv) {
     cc_free_view_data(objs, n);
     check(cc_view_data(i.s, "nope", 0.5, &objs, &n) == 1005, "cc_view_data unknown name -> E1005");
   }
+  { Session i;  // face-label mapping: ranges == census faces (v0.2 labels)
+    std::string r;
+    check(i.run("box fb 30 20 10", r) == 0, "labels: box created");
+    double vol = 0, area = 0, bb[6]; int faces = 0, edges = 0;
+    check(cc_object_stats(i.s, "fb", &vol, &area, bb, &faces, &edges) == 0 && faces == 6,
+          "labels: box census face count == 6");
+    CCViewData* objs = nullptr; int n = 0;
+    check(cc_view_data(i.s, "fb", 0.5, &objs, &n) == 0 && n == 1, "labels: view data for box");
+    const CCViewData& d = objs[0];
+    check(d.faceRangeCount == 6, "labels: one range per census face (6)");
+    bool indicesOk = d.faceRangeCount == 6;
+    int cursor = 0;
+    for (int f = 0; f < d.faceRangeCount; ++f) {
+      if (d.faceRanges[f].faceIndex != f) indicesOk = false;
+      if (d.faceRanges[f].indexStart != cursor) indicesOk = false;
+      if (d.faceRanges[f].indexCount <= 0) indicesOk = false;
+      cursor += d.faceRanges[f].indexCount;
+    }
+    if (cursor != d.triangleCount * 3) indicesOk = false;
+    check(indicesOk, "labels: ranges are census-ordered and partition the index buffer");
+    // Each range's vertex centroid must be a true box face centre:
+    // the label anchor for face f is that face's centroid, and the
+    // number shown is faceRanges[f].faceIndex (the @face index).
+    const double centres[6][3] = {{15,10,0},{15,10,10},{15,0,5},{30,10,5},{15,20,5},{0,10,5}};
+    bool centroidsOk = d.faceRangeCount == 6;
+    for (int f = 0; f < d.faceRangeCount && centroidsOk; ++f) {
+      double cx = 0, cy = 0, cz = 0; int cnt = 0;
+      for (int k = d.faceRanges[f].indexStart; k < d.faceRanges[f].indexStart + d.faceRanges[f].indexCount; ++k) {
+        int vi = d.indices[k];
+        cx += d.vertices[vi * 3]; cy += d.vertices[vi * 3 + 1]; cz += d.vertices[vi * 3 + 2]; ++cnt;
+      }
+      if (!cnt) { centroidsOk = false; break; }
+      cx /= cnt; cy /= cnt; cz /= cnt;
+      bool matched = false;
+      for (auto& c : centres) if (near(cx, c[0], 0.6) && near(cy, c[1], 0.6) && near(cz, c[2], 0.6)) matched = true;
+      if (!matched) centroidsOk = false;
+    }
+    check(centroidsOk, "labels: every range centroid is a real box face centre");
+    cc_free_view_data(objs, n);
+    if (!mock) {
+      Session demo;
+      char* out = nullptr;
+      int rc = cc_execute_script(demo.s, "../../repo/Core/scripts/demo.ccs", &out);
+      if (rc != 0) rc = cc_execute_script(demo.s, "../repo/Core/scripts/demo.ccs", &out);
+      if (rc != 0) rc = cc_execute_script(demo.s, "repo/Core/scripts/demo.ccs", &out);
+      if (rc != 0) rc = cc_execute_script(demo.s, "../scripts/demo.ccs", &out);
+      check(rc == 0, "labels: demo script runs");
+      double dv = 0, da = 0, dbb[6]; int df = 0, de = 0;
+      check(cc_object_stats(demo.s, "part3", &dv, &da, dbb, &df, &de) == 0, "labels: demo part3 stats");
+      CCViewData* dobjs = nullptr; int dn = 0;
+      check(cc_view_data(demo.s, "part3", 0.5, &dobjs, &dn) == 0 && dn == 1, "labels: demo view data");
+      check(dobjs && dobjs[0].faceRangeCount == df, "labels: demo label count == census face count");
+      cc_free_view_data(dobjs, dn);
+    }
+  }
 #ifndef CC_MOCK
   { Session i;  // full demo script vs the prototype's measured result
     char* out = nullptr;

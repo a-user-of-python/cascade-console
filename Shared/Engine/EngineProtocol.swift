@@ -90,18 +90,34 @@ public final class StubEngine: CascadeEngine {
 /// groups; the CCM1 adapter derives flat normals and a single face
 /// group — see EngineMeshAdapter).
 public struct EngineViewObject: Equatable {
+    /// One census face's slice of the tessellation index buffer.
+    /// faceIndex is the 0-based census index — the number @face <n>
+    /// references — carried from the backend's own face enumeration
+    /// (ccgeom_face_ranges), never re-derived in the viewer.
+    public struct FaceRange: Equatable {
+        public var faceIndex: Int32
+        public var indexStart: Int32
+        public var indexCount: Int32
+        public init(faceIndex: Int32, indexStart: Int32, indexCount: Int32) {
+            self.faceIndex = faceIndex
+            self.indexStart = indexStart
+            self.indexCount = indexCount
+        }
+    }
     public var name: String
     public var vertices: [Float]   // 3 * vertexCount, xyz positions
     public var indices: [Int32]    // 3 * triangleCount
     public var volume: Double
     public var bbox: [Double]      // minX, minY, minZ, maxX, maxY, maxZ
+    public var faceRanges: [FaceRange]
     public init(name: String, vertices: [Float], indices: [Int32],
-                volume: Double, bbox: [Double]) {
+                volume: Double, bbox: [Double], faceRanges: [FaceRange] = []) {
         self.name = name
         self.vertices = vertices
         self.indices = indices
         self.volume = volume
         self.bbox = bbox
+        self.faceRanges = faceRanges
     }
 }
 

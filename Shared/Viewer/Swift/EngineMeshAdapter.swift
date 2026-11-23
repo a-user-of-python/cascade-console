@@ -67,13 +67,23 @@ public enum EngineMeshAdapter {
                 normals.append(contentsOf: [n, n, n])
             }
 
-            // One face group covering the whole object.
-            u32(1)
-            u32(0)                                       // sourceFaceIndex
-            u32(0)                                       // vertexStart
-            u32(UInt32(positions.count))                 // vertexCount
-            u32(0)                                       // indexStart
-            u32(UInt32(positions.count))                 // indexCount
+            // Face groups from the backend's census ranges (v0.2
+            // labels): sourceFaceIndex is the true @face index. In
+            // the unwelded layout vertex i == index-corner i, so each
+            // group's vertex range equals its index range. Objects
+            // whose backend gave no ranges fall back to one group.
+            let groups = obj.faceRanges.isEmpty
+                ? [EngineViewObject.FaceRange(faceIndex: 0, indexStart: 0,
+                                              indexCount: Int32(positions.count))]
+                : obj.faceRanges
+            u32(UInt32(groups.count))
+            for g in groups {
+                u32(UInt32(g.faceIndex))                 // sourceFaceIndex
+                u32(UInt32(g.indexStart))                // vertexStart (unwelded)
+                u32(UInt32(g.indexCount))                // vertexCount
+                u32(UInt32(g.indexStart))                // indexStart
+                u32(UInt32(g.indexCount))                // indexCount
+            }
 
             u32(UInt32(positions.count))
             u32(UInt32(positions.count))

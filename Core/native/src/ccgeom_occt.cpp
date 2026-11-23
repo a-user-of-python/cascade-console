@@ -15,6 +15,14 @@
 // ccgeom_mc.cpp. No OCCT source is modified (LGPL 2.1 + exception).
 // ============================================================================
 #include "ccgeom.h"
+#include <BRepAdaptor_Surface.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepClass3d_SolidClassifier.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepTools.hxx>
+#include <TopExp_Explorer.hxx>
+#include "ccsim_backend.h"
+
 
 #include <cmath>
 #include <cstdlib>
@@ -324,3 +332,142 @@ int ccgeom_export_stl(CCGeomShape* s, const char* path, int* err) {
 }
 
 void* ccgeom_native_handle(CCGeomShape*) { return nullptr; }  // TopoDS_Shape is not an MCFacadeShape
+
+// ---- ccsim backend extension (merged from ccsim_backend_occt.cpp at
+// v0.2 integration, per docs/SIM-INTEGRATION.md: same TU as CCGeomShape
+// so the sim layer shares ccgeom_last_error() storage) ----
+
+// (merged: the sim functions below use this TU's own setErr /
+// ccgeom_last_error() channel — the standalone file's shim is gone.)
+
+bool faceByIndex(CCGeomShape* s, int faceIndex, TopoDS_Face& out) {
+  CCIndexMap map;
+  TopExp::MapShapes(s->shape, TopAbs_FACE, map);
+  if (faceIndex < 0 || faceIndex >= map.Extent()) return false;
+  out = TopoDS::Face(map.FindKey(faceIndex + 1));
+  return true;
+}
+
+int ccgeom_point_inside(CCGeomShape* s, double x, double y, double z,
+                        int* err) {
+  if (!s) return setErr(err, CCGEOM_ERR_INVALID_ARG, "point_inside: null shape");
+  try {
+    TopoDS_Solid solid;
+    if (s->shape.ShapeType() == TopAbs_SOLID) {
+      solid = TopoDS::Solid(s->shape);
+    } else {
+      TopExp_Explorer ex(s->shape, TopAbs_SOLID);
+      if (!ex.More())
+        return setErr(err, CCGEOM_ERR_EMPTY, "point_inside: shape has no solid");
+      solid = TopoDS::Solid(ex.Current());
+    }
+    BRepClass3d_SolidClassifier cls(solid);
+    cls.Perform(gp_Pnt(x, y, z), 1e-7);
+    TopAbs_State st = cls.State();
+    if (err) *err = CCGEOM_OK;
+    return (st == TopAbs_IN || st == TopAbs_ON) ? 1 : 0;
+  } catch (const std::exception& e) {
+    return setErr(err, CCGEOM_ERR_OCCT, std::string("point_inside: ") + e.what());
+  }
+}
+
+double ccgeom_point_face_distance(CCGeomShape* s, int faceIndex,
+                                  double x, double y, double z, int* err) {
+  if (!s) { setErr(err, CCGEOM_ERR_INVALID_ARG, "face distance: null shape"); return -1; }
+  try {
+    TopoDS_Face face;
+    if (!faceByIndex(s, faceIndex, face)) {
+      setErr(err, CCGEOM_ERR_INVALID_ARG, "face distance: face index out of range");
+      return -1;
+    }
+    TopoDS_Vertex v = BRepBuilderAPI_MakeVertex(gp_Pnt(x, y, z)).Vertex();
+    BRepExtrema_DistShapeShape dist(face, v);
+    dist.Perform();
+    if (!dist.IsDone()) {
+      setErr(err, CCGEOM_ERR_OCCT, "face distance: BRepExtrema did not finish");
+      return -1;
+    }
+    if (err) *err = CCGEOM_OK;
+    return dist.Value();
+  } catch (const std::exception& e) {
+    setErr(err, CCGEOM_ERR_OCCT, std::string("face distance: ") + e.what());
+    return -1;
+  }
+}
+
+double ccgeom_face_area(CCGeomShape* s, int faceIndex, int* err) {
+  if (!s) { setErr(err, CCGEOM_ERR_INVALID_ARG, "face area: null shape"); return -1; }
+  try {
+    TopoDS_Face face;
+    if (!faceByIndex(s, faceIndex, face)) {
+      setErr(err, CCGEOM_ERR_INVALID_ARG, "face area: face index out of range");
+      return -1;
+    }
+    GProp_GProps props;
+    BRepGProp::SurfaceProperties(face, props);
+    if (err) *err = CCGEOM_OK;
+    return props.Mass();
+  } catch (const std::exception& e) {
+    setErr(err, CCGEOM_ERR_OCCT, std::string("face area: ") + e.what());
+    return -1;
+  }
+}
+
+int ccgeom_face_point_normal(CCGeomShape* s, int faceIndex,
+                             double pointOut[3], double normalOut[3],
+                             int* err) {
+  if (!s || !pointOut || !normalOut)
+    return setErr(err, CCGEOM_ERR_INVALID_ARG, "face normal: null argument");
+  try {
+    TopoDS_Face face;
+    if (!faceByIndex(s, faceIndex, face))
+      return setErr(err, CCGEOM_ERR_INVALID_ARG, "face normal: face index out of range");
+    BRepAdaptor_Surface ad(face);
+    double u0, u1, v0, v1;
+    BRepTools::UVBounds(face, u0, u1, v0, v1);
+    gp_Pnt P;
+    gp_Vec DU, DV;
+    ad.D1((u0 + u1) / 2.0, (v0 + v1) / 2.0, P, DU, DV);
+    gp_Vec N = DU.Crossed(DV);
+    if (N.Magnitude() < 1e-12)
+      return setErr(err, CCGEOM_ERR_OCCT, "face normal: degenerate surface point");
+    N.Normalize();
+    if (face.Orientation() == TopAbs_REVERSED) N.Reverse();
+    pointOut[0] = P.X(); pointOut[1] = P.Y(); pointOut[2] = P.Z();
+    normalOut[0] = N.X(); normalOut[1] = N.Y(); normalOut[2] = N.Z();
+    if (err) *err = CCGEOM_OK;
+    return CCGEOM_OK;
+  } catch (const std::exception& e) {
+    return setErr(err, CCGEOM_ERR_OCCT, std::string("face normal: ") + e.what());
+  }
+}
+
+// ---- face ranges (v0.2 labels): same face iteration as tessellate ----
+// Re-runs the identical TopExp face-map walk ccgeom_tessellate uses, so
+// range f is exactly the slice tessellate appended for census face f.
+int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
+                       CCGeomFaceRange** outRanges, int* outCount, int* err) {
+  if (!s || !outRanges || !outCount) return setErr(err, CCGEOM_ERR_INVALID_ARG, "face_ranges: null argument");
+  try {
+    BRepMesh_IncrementalMesh mesher(s->shape, deflectionMM);
+    (void)mesher;
+    CCIndexMap fm;
+    TopExp::MapShapes(s->shape, TopAbs_FACE, fm);
+    std::vector<CCGeomFaceRange> ranges;
+    int indexCursor = 0;
+    for (int fi = 1; fi <= fm.Extent(); ++fi) {
+      TopoDS_Face face = TopoDS::Face(fm.FindKey(fi));
+      TopLoc_Location loc;
+      Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
+      int count = tri.IsNull() ? 0 : tri->NbTriangles() * 3;
+      ranges.push_back(CCGeomFaceRange{fi - 1, indexCursor, count});
+      indexCursor += count;
+    }
+    CCGeomFaceRange* buf = (CCGeomFaceRange*)std::malloc((ranges.empty() ? 1 : ranges.size()) * sizeof(CCGeomFaceRange));
+    if (!buf) return setErr(err, CCGEOM_ERR_OCCT, "face_ranges: out of memory");
+    std::memcpy(buf, ranges.data(), ranges.size() * sizeof(CCGeomFaceRange));
+    *outRanges = buf; *outCount = (int)ranges.size();
+    if (err) *err = CCGEOM_OK;
+    return CCGEOM_OK;
+  } catch (const std::exception& e) { return setErr(err, CCGEOM_ERR_OCCT, std::string("face_ranges: ") + e.what()); }
+}

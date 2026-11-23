@@ -98,6 +98,17 @@ struct MCFacadeShape* cc_borrow_shape(CCSession* s, const char* name);
 // Tessellation for the 3D viewer, per object: positions are mm,
 // indices 0-based, triangles only, vertices duplicated per face
 // (flat shading).  Mirrors the prototype's `view` JSON exactly.
+/// One face's slice of a CCViewData tessellation. faceIndex is the
+/// 0-based census face index — the same number @face <n> references
+/// in fillet / sim commands — and [indexStart, indexStart+indexCount)
+/// is that face's slice of CCViewData.indices (element units, not
+/// triangles). Every census face has a range (indexCount may be 0).
+typedef struct CCFaceRange {
+  int faceIndex;
+  int indexStart;
+  int indexCount;
+} CCFaceRange;
+
 typedef struct CCViewData {
   char*   name;          // heap copy
   float*  vertices;      // 3 * vertexCount
@@ -106,6 +117,8 @@ typedef struct CCViewData {
   int     triangleCount;
   double  volume;
   double  bbox[6];
+  CCFaceRange* faceRanges;  // heap array, faceRangeCount entries
+  int     faceRangeCount;
 } CCViewData;
 
 int  cc_view_data(CCSession* s, const char* nameOrNull, double deflectionMM,

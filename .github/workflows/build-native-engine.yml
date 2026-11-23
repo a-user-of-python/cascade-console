@@ -34,7 +34,11 @@ jobs:
       - name: Build + run engine tests (mock + OCCT backends)
         run: |
           cd Core/native
-          CC_OCCT_PREFIX=/usr ./build_host.sh
+          CC_OCCT_PREFIX=/usr bash ./build_host.sh
+      - name: Build + run sim tests (mock + OCCT backends)
+        run: |
+          cd Core/native
+          CC_OCCT_PREFIX=/usr bash ./build_sim.sh
 
   mc-adapter-compile:
     name: Device backend adapter compile check

@@ -42,7 +42,12 @@ present in the executable). The 24 prototype-proven commands
 (primitives, booleans, fillet/chamfer, transforms, measure, STEP/STL
 export, undo/redo, sessions) run on device; the remaining catalog
 commands still answer honestly (E1002/E5002) until their Layer-2
-dispatch lands. After every successful command the app pulls the
+dispatch lands. **Simulation is included**: the `sim` command family
+(voxel hex8 linear statics + steady-state thermal on the project's
+own solver over OCCT geometry — 35/35 host checks) is registered in
+the same interpreter. **Face-number labels**: `view labels faces on`
+shows each face's census index (the number `@face <n>` accepts) as a
+high-contrast chip at the face's centroid in the 3D view. After every successful command the app pulls the
 session tessellation (`cc_view_data`) through the CCM1 contract into
 the real Metal viewer. The **Mac app remains on the stub engine**
 for now: its target still carries its own per-app engine types and

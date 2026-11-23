@@ -25,6 +25,7 @@
 // ============================================================================
 #include "cc_facade.h"
 #include "ccgeom.h"
+#include "ccsim.h"
 
 #include <algorithm>
 #include <cctype>
@@ -239,6 +240,10 @@ const char* const kHelpLines[] = {
   "view <path.json> [name] [deflection] — tessellation data for the 3D viewer",
   "run <scriptfile> — execute a .txt/.ccs script of commands",
   "echo <text...> / help [command]",
+  "sim material list|show|custom|<object> <name> — simulation materials",
+  "sim select|fix|load <object> @face <n> ... — sim boundary conditions",
+  "sim mesh size <mm> | sim thermal|static | sim run [<object>]",
+  "sim results [view <field> [path]|export <path>] / sim clear [<object>]",
 };
 
 }  // namespace
@@ -247,6 +252,7 @@ struct CCSession {
   std::map<std::string, CCGeomShape*> objects;  // owned
   std::map<std::string, std::vector<std::pair<double, double>>> profiles;
   std::map<std::string, double> vars;
+  ccsim::State sim;  // analysis state (NOT snapshotted: not model state)
   std::vector<Snapshot> undoStack, redoStack;
   std::vector<std::pair<std::string, std::pair<bool, int>>> history;  // line, (ok, code)
   int lastCode = 0; std::string lastName, lastMessage; int lastLine = 0;
@@ -449,6 +455,20 @@ std::string CCSession::runScriptFile(const std::string& path) {
   return "Ran " + std::to_string(done) + " command(s) from " + path + ".";
 }
 
+// Adapter: ccsim::Host over the session's own helpers (INTEGRATION.md).
+struct SimHost : ccsim::Host {
+  CCSession& s;
+  explicit SimHost(CCSession& sess) : s(sess) {}
+  CCGeomShape* object(const std::string& name) override {
+    try { return s.object(name); }
+    catch (CCError& e) { throw ccsim::Error{e.code, e.name, e.message}; }
+  }
+  double num(const std::string& token) override {
+    try { return s.num(token); }
+    catch (CCError& e) { throw ccsim::Error{e.code, e.name, e.message}; }
+  }
+};
+
 std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
   std::string cmd = lower(tokens[0]);
   std::vector<std::string> args = tail(tokens, 1);
@@ -479,6 +499,13 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
     }
     if (cmd == "echo") {
       for (size_t i = 0; i < args.size(); ++i) { if (i) result += " "; result += args[i]; }
+      goto done;
+    }
+    // ---- sim (analysis state; deliberately NOT in mutatingCommands) ----
+    if (cmd == "sim") {
+      SimHost host(*this);
+      try { result = ccsim::execute(sim, host, args); }
+      catch (ccsim::Error& e) { throw CCError(e.code, e.name, e.message); }
       goto done;
     }
     // ---- set / clear ---------------------------------------------------------
@@ -1065,6 +1092,13 @@ int cc_view_data(CCSession* s, const char* nameOrNull, double deflectionMM,
       d.name = dupStr(t.first);
       d.vertices = verts; d.vertexCount = vc;
       d.indices = idx; d.triangleCount = ic / 3;
+      {
+        CCGeomFaceRange* ranges = nullptr; int rangeCount = 0; int re = CCGEOM_OK;
+        if (ccgeom_face_ranges(t.second, deflectionMM, &ranges, &rangeCount, &re) == CCGEOM_OK) {
+          d.faceRanges = (CCFaceRange*)ranges;
+          d.faceRangeCount = rangeCount;
+        }
+      }
       d.volume = s->volumeOf(t.second);
       s->bboxOf(t.second, d.bbox);
       ++n;
@@ -1075,6 +1109,7 @@ int cc_view_data(CCSession* s, const char* nameOrNull, double deflectionMM,
       std::free(arr[i].name);
       ccgeom_free_buffer(arr[i].vertices);
       ccgeom_free_buffer(arr[i].indices);
+      ccgeom_free_buffer(arr[i].faceRanges);
     }
     std::free(arr);
     setLast(s, e);
@@ -1091,6 +1126,7 @@ void cc_free_view_data(CCViewData* objects, int count) {
     std::free(objects[i].name);
     ccgeom_free_buffer(objects[i].vertices);
     ccgeom_free_buffer(objects[i].indices);
+    ccgeom_free_buffer(objects[i].faceRanges);
   }
   std::free(objects);
 }
