@@ -395,3 +395,13 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   job performs it against the pinned cascade-ios fetch.
 - build-ipa.yml: COMPILER_INDEX_STORE_ENABLE=NO on the CascadeKit
   build (indexing 5,234 OCCT files in CI is pure overhead).
+- CI fix 4 (IPA CascadeKit step): the xcodebuild build of the
+  generated 5,234-file CascadeKit project never completed (>75 min
+  in-step across three runs, incl. with the index store disabled).
+  The step now compiles the identical source set directly with
+  parallel clang (xargs -P ncpu), using the exact settings
+  gen_project.py encodes (defines OCC_CONVERT_SIGNALS / No_Exception
+  / OCCT_NO_PLUGINS / NDEBUG, all OCCT header dirs, gnu++17, -O1),
+  archived into the same libCascadeKit.a, and the result is cached
+  (actions/cache keyed by the pinned cascade-ios SHA + patch hash)
+  so later runs skip it. OCCT sources remain unmodified.

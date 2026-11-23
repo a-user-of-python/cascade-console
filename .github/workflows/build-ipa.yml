@@ -53,21 +53,48 @@ jobs:
           test -f Shared/Resources/catalog.json
           xcodebuild -list -project Apps/iPad/CascadeConsole.xcodeproj
 
-      - name: Build CascadeKit (OCCT + mc_* facade)
+      - name: Restore cached CascadeKit library
+        id: kitcache
+        uses: actions/cache@v4
+        with:
+          path: build/kitlib
+          key: cascadekit-${{ env.CASCADE_IOS_SHA }}-${{ hashFiles('Core/native/ci/patch_cascade_port.py') }}-v1
+
+      - name: Build CascadeKit library (OCCT + mc_* facade, direct clang)
+        if: steps.kitcache.outputs.cache-hit != 'true'
         run: |
-          cd cascade-port-src
-          python3 gen_project.py
-          xcodebuild build \
-            -project CascadePort.xcodeproj \
-            -target CascadeKit \
-            -configuration Release \
-            -sdk iphoneos \
-            SYMROOT="$GITHUB_WORKSPACE/build/kitroot" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
-          test -f "$GITHUB_WORKSPACE/build/kitroot/Release-iphoneos/libCascadeKit.a"
+          set -euo pipefail
+          # The xcodebuild route over the generated 5,234-file project
+          # never finished a run (>75 min in-step, three attempts).
+          # This compiles the same sources directly with parallel
+          # clang, using the exact settings gen_project.py encodes
+          # (defines + header dirs + gnu++17), into the same product.
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          cd "$GITHUB_WORKSPACE/cascade-port-src"
+          mkdir -p "$GITHUB_WORKSPACE/build/kitobj" "$GITHUB_WORKSPACE/build/kitlib"
+          INC="-IFacade -IOCCT/generated"
+          while IFS= read -r d; do INC="$INC -I$d"; done < <(find OCCT/src -type d | sort)
+          find OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c' > "$GITHUB_WORKSPACE/build/kitobj/sources.txt"
+          echo "Facade/occt_facade.cpp" >> "$GITHUB_WORKSPACE/build/kitobj/sources.txt"
+          wc -l "$GITHUB_WORKSPACE/build/kitobj/sources.txt"
+          export SDK INC GITHUB_WORKSPACE
+          compile_one() {
+            src="$1"
+            obj="$GITHUB_WORKSPACE/build/kitobj/$(printf '%s' "$src" | md5 -q).o"
+            case "$src" in
+              *.c) clang -target arm64-apple-ios17.0 -isysroot "$SDK" -O1 \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+              *)   clang++ -std=gnu++17 -target arm64-apple-ios17.0 -isysroot "$SDK" -O1 \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+            esac
+          }
+          export -f compile_one
+          xargs -P "$(sysctl -n hw.ncpu)" -I SRC bash -c 'compile_one "$@"' _ SRC \
+            < "$GITHUB_WORKSPACE/build/kitobj/sources.txt"
+          ar rcs "$GITHUB_WORKSPACE/build/kitlib/libCascadeKit.a" "$GITHUB_WORKSPACE/build/kitobj"/*.o
+          ls -la "$GITHUB_WORKSPACE/build/kitlib/"
 
       - name: Build Layer-2 engine library (cc_interpreter + ccgeom_mc)
         run: |
@@ -111,7 +138,7 @@ jobs:
             SWIFT_ACTIVE_COMPILATION_CONDITIONS=CASCADE_NATIVE_ENGINE \
             SWIFT_INCLUDE_PATHS="$GITHUB_WORKSPACE/build/ccmodule" \
             HEADER_SEARCH_PATHS='$(inherited) '"$GITHUB_WORKSPACE/Core/native/include" \
-            OTHER_LDFLAGS='$(inherited) -L'"$GITHUB_WORKSPACE/build/kitroot/Release-iphoneos"' -L'"$GITHUB_WORKSPACE/build"' -lCascadeKit -lCascadeConsoleEngine -lc++'
+            OTHER_LDFLAGS='$(inherited) -L'"$GITHUB_WORKSPACE/build/kitlib"' -L'"$GITHUB_WORKSPACE/build"' -lCascadeKit -lCascadeConsoleEngine -lc++'
 
       - name: Gate — bundle resources AND native engine in the binary
         run: |
