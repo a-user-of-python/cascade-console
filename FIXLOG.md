@@ -153,3 +153,17 @@ and the Shared-canonical structure (§1–§3).
   The first CI runs are the first real compiles (risks ranked in the
   report to the main agent).
 - No workflow was dispatched; no push was made.
+
+## CI fix loop — coordinator, 2026-11-23
+
+### F5 — iPad project missing SDKROOT (IPA runs 45241769566 / 45241814167, exit 70)
+xcodebuild failed before compiling: "Unable to find a destination
+matching { generic:1, platform:iOS }" and the only available
+destinations listed were macOS ("My Mac" / "Any Mac"). Root cause:
+the hand-authored pbxproj never set `SDKROOT`, so Xcode treated the
+target as a macOS app despite IPHONEOS_DEPLOYMENT_TARGET and
+TARGETED_DEVICE_FAMILY=2. Every working iOS project in this workspace
+(HiddenBlocks, cascade-port) sets `SDKROOT = iphoneos` in the target
+configurations. Fix: added `SDKROOT = iphoneos;` to both target
+build configurations (Debug + Release). Xcode on the runner is
+26.6 (iphoneos26.5 SDK) — no Xcode-selection change was needed.
