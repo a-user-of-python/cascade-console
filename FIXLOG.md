@@ -216,3 +216,18 @@ Real compilation started after F6. Three root causes:
    `Data`; the API takes UnsafeRawPointer. Fix: buffers are created
    directly inside each array's withUnsafeBytes from its raw base
    address and byte count.
+
+### RESULT — all three workflows GREEN, 2026-11-23 (commit 4eeb1fd4)
+After F7: Host tests run 45245238484 SUCCESS, Build Mac run
+45245238556 SUCCESS, Build iPad IPA run 45245238379 SUCCESS (all
+steps incl. the bundle-resource gate). IPA artifact verified from
+the downloaded artifact itself: bundle id com.user.cascadeconsole,
+version 1.0 (1), arm64 Mach-O executable, catalog.json (86,796 B),
+default.metallib (87,596 B), OCCT-LGPL-2.1.txt and
+OCCT-LGPL-EXCEPTION.txt, welcome.cascade and sample-project.cascade
+all inside CascadeConsole.app. Mac artifact verified: arm64 Mach-O
+CascadeConsoleMac binary (676 KB) in the unsigned zip. Honest
+scope note (unchanged): a green IPA run means the app compiles and
+packages against the Swift StubEngine — the native OCCT Layer-2
+library does not exist yet, so modelling commands answer
+NOT_IMPLEMENTED on device until it is linked.
