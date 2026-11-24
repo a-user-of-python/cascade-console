@@ -906,3 +906,35 @@ cascade-port facade. (Local host runs use the conda OCCT 8.0.1
 tree with a manual rpath-link line — the sandbox has no distro
 OCCT dev packages; CI's engine-host job runs the same suites
 against distro OCCT via build_host.sh / build_sim.sh as before.)
+
+CI on the v0.2.4 commits (ef53c32b + harness-check correction
+c1181d88): all four workflows SUCCESS — Host tests (run
+45437164106: prototype 47/47, tessellation contract, projection
+guard); Build Mac app (45437164029); Build iPad IPA (45437164110:
+bundle gate green); Native engine (45440245476, re-dispatched
+after the first attempt's matrix job was cancelled in the macOS
+runner queue — no code change): "RESULT: 125 pass, 0 fail (mc
+per-command matrix)" (117 baseline + 8 edge-census checks),
+"RESULT: 35 pass, 0 fail (mc view-data smoke)" (26 + 9, including
+the per-edge fillet/chamfer census binding on the device
+backend), "RESULT: 53 pass, 0 fail (swift viewer harness)" (25 +
+28: line layout 48/32 pinned, all 154 default-scene line vertices
+re-read exact, arrow length 2.8566 == 20% of the box diagonal,
+edge round-trip + endpoint set, rotate/labels parsing + camera);
+engine host suites 123 pass OCCT / 100 pass + 5 skip mock, sim
+35/35 both backends. One harness check was corrected mid-loop:
+the edge-overlay segment set is 18 distinct position pairs (12
+geometric edges + 6 face diagonals), not 12 — the overlay is
+built from the unwelded triangle soup, as it always has been;
+the census-12 truth lives in MeshObject.edges and is asserted
+separately. The IPA artifact was downloaded and verified by
+hand: bundle com.user.cascadeconsole, version 0.2.4 (6),
+_cc_execute / _cc_session_create / _mc_clone_shape /
+_mc_export_stl present, catalog.json + default.metallib + both
+OCCT licence texts bundled, UIFileSharingEnabled = true and
+LSSupportsOpeningDocumentsInPlace = true. 9,170,580 bytes,
+md5 5276f888e579be134031988e0e5b6d1a. The user's device verdict
+is the final judge: the fan should be GONE (grid + small XYZ
+arrows only), `view rotate 45 30` should swing the camera,
+`view labels edges on` should number the box's 12 edges with
+the fillet/chamfer census indices.
