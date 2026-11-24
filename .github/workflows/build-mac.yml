@@ -106,8 +106,8 @@ jobs:
           set -euo pipefail
           mkdir -p build/kitlib-mac build/engine-mac-arm64 build/engine-mac-x86_64
           lipo -create \
-            build/kitlib-mac-arm64/libCascadeKit.a \
-            build/kitlib-mac-x86_64/libCascadeKit.a \
+            build/kitlib-arm/libCascadeKit.a \
+            build/kitlib-x86/libCascadeKit.a \
             -output build/kitlib-mac/libCascadeKit.a
           echo "CascadeKit archs: $(lipo -archs build/kitlib-mac/libCascadeKit.a)"
           SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
