@@ -13,10 +13,14 @@ name: Build Mac app
 # minimises queue exposures: a single job queues once, restores
 # both per-arch kit caches, compiles a kit inline only on a cache
 # miss (~41 min per arch measured), then builds the universal app.
-# The x86_64 engine slice is EXECUTED two ways: under Rosetta on
-# the arm64 runner (matrix + smoke against the exact shipped
-# slices, in the build job) and natively on a macos-15-intel
-# runner (the intel-matrix job — same suites, no translation).
+# The x86_64 engine slice is EXECUTED natively on a
+# macos-15-intel runner (the intel-matrix job: full per-command
+# matrix + view-data smoke, no translation). A Rosetta-translated
+# run of the same suites was tried and removed: translated
+# processes could not create files in the test tmpdir (the run /
+# export-step / export-stl matrix cases failed on file creation
+# while the identical binaries pass 186/186 natively), so the
+# Intel job is the execution proof of record.
 
 on:
   workflow_dispatch:
@@ -163,29 +167,6 @@ jobs:
             -output build/libCascadeConsoleEngine.a
           echo "Engine archs: $(lipo -archs build/libCascadeConsoleEngine.a)"
           nm build/engine-mac-x86_64/libCascadeConsoleEngine.a | grep -E "cc_execute|mc_clone_shape" || true
-
-      - name: Execute the x86_64 engine slice under Rosetta (matrix + smoke)
-        run: |
-          set -euo pipefail
-          # The x86_64 slices of the SAME archives that get linked
-          # into the app, exercised on this arm64 runner through
-          # Rosetta: the per-command matrix and the view-data smoke,
-          # compiled for x86_64 and run. The native Intel job in this
-          # workflow runs the same suites untranslated; this step
-          # keeps the x86_64 execution proof independent of Intel
-          # runner availability and speed.
-          mkdir -p build/rosetta
-          lipo build/libCascadeConsoleEngine.a -thin x86_64 -output build/engine-x86_64.a
-          XFLAGS="-std=c++17 -arch x86_64 -mmacosx-version-min=14.0 -O1"
-          INC="-Icore/native/include -Icascade-port-src/Facade"
-          clang++ $XFLAGS $INC -c Core/native/tests/test_matrix_mc.cpp -o build/rosetta/tm.o
-          clang++ $XFLAGS build/rosetta/tm.o build/engine-x86_64.a build/kitlib-x86/libCascadeKit.a -o build/rosetta/test_matrix_mc
-          file build/rosetta/test_matrix_mc
-          ./build/rosetta/test_matrix_mc
-          clang++ $XFLAGS $INC -c Core/native/tests/test_smoke_view.cpp -o build/rosetta/ts.o
-          clang++ $XFLAGS build/rosetta/ts.o build/engine-x86_64.a build/kitlib-x86/libCascadeKit.a -o build/rosetta/test_smoke_view
-          ./build/rosetta/test_smoke_view
-          echo "ROSETTA PASS: x86_64 engine slice executed (matrix + smoke green)"
 
       - name: Write CCascadeConsole module map
         run: |
