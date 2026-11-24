@@ -292,12 +292,15 @@ jobs:
           case "$ARCHS" in *arm64*) ;; *) echo "MISSING arm64 slice"; exit 1;; esac
           for a in arm64 x86_64; do
             lipo "$BIN" -thin "$a" -output "build/bin-$a"
+            # nm into a file first: piping nm into grep -q races
+            # (grep -q exits on first match, nm dies on SIGPIPE,
+            # and pipefail turns that into a spurious gate failure).
+            nm "build/bin-$a" > "build/nm-$a.txt"
             echo "--- $a slice symbols:"
-            nm "build/bin-$a" | grep -E "_cc_execute$|_cc_session_create$|_mc_clone_shape$|_mc_export_stl$"
-            nm "build/bin-$a" | grep -qE " _cc_execute$"
-            nm "build/bin-$a" | grep -qE " _cc_session_create$"
-            nm "build/bin-$a" | grep -qE " _mc_clone_shape$"
-            nm "build/bin-$a" | grep -qE " _mc_export_stl$"
+            grep -E "_cc_execute$|_cc_session_create$|_mc_clone_shape$|_mc_export_stl$" "build/nm-$a.txt"
+            for s in _cc_execute _cc_session_create _mc_clone_shape _mc_export_stl; do
+              grep -qE " $s\$" "build/nm-$a.txt" || { echo "GATE-FAIL: $s missing in $a slice"; exit 1; }
+            done
           done
           echo "GATE PASS: universal binary, native engine linked in BOTH slices (not the stub)"
 

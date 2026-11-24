@@ -164,10 +164,11 @@ jobs:
           echo "GATE PASS: file sharing is ON in the shipped bundle"
           BIN="$APP_PATH/CascadeConsole"
           echo "Native-engine symbols in the shipped executable:"
-          xcrun nm "$BIN" | grep -E "_cc_execute$|_cc_session_create$|_mc_clone_shape$|_mc_export_stl$"
-          xcrun nm "$BIN" | grep -qE " _cc_execute$"
-          xcrun nm "$BIN" | grep -qE " _cc_session_create$"
-          xcrun nm "$BIN" | grep -qE " _mc_clone_shape$"
+          xcrun nm "$BIN" > build/nm-shipped.txt
+          grep -E "_cc_execute$|_cc_session_create$|_mc_clone_shape$|_mc_export_stl$" build/nm-shipped.txt
+          grep -qE " _cc_execute$" build/nm-shipped.txt
+          grep -qE " _cc_session_create$" build/nm-shipped.txt
+          grep -qE " _mc_clone_shape$" build/nm-shipped.txt
           echo "GATE PASS: native engine is linked into the shipped binary"
 
       - name: Package IPA
