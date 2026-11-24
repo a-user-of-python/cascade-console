@@ -85,7 +85,11 @@ jobs:
             export ARCH="$1" OBJDIR="$2" LIBDIR="$3"
             mkdir -p "$OBJDIR" "$LIBDIR"
             cd cascade-port-src
-            DEFS="-DHAVE_IOS_DISABLED_FEATURES -D__USE_XOPEN -DHAVE_XLOCALE_H -DHAVE_XLIB -DHAVE_CLANG -DHAVE_TBB_DISABLED -DHAVE_VTK_DISABLED -DHAVE_OPENGL_DISABLED -DOCCT_NO_PLUGINS -DHAVE_D3D_DISABLED -DHAVE_GLES2_DISABLED -DHAVE_SAMPLES_DISABLED -DHAVE_TESTS_DISABLED"
+            # Proven define set: identical to build-native-engine.yml's
+            # host kit build (the HAVE_* list an earlier draft used made
+            # Aspect_DisplayConnection.cxx demand X11 headers that do
+            # not exist on macOS runners — do not re-add it).
+            DEFS="-DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG"
             INC="-IFacade -IOCCT/generated"
             while IFS= read -r d; do INC="$INC -I$d"; done < <(find OCCT/src -type d | sort)
             export DEFS INC
@@ -93,11 +97,17 @@ jobs:
             : > "$OBJDIR/failures.log"
             compile_one() {
               src="$1"
-              obj="$OBJDIR/$(echo "$src" | md5 -q).o"
+              obj="$OBJDIR/$(printf '%s' "$src" | md5 -q).o"
               [ -f "$obj" ] && { echo x >> "$OBJDIR/progress.log"; return 0; }
-              if clang++ -std=c++17 -arch "$ARCH" -mmacosx-version-min=14.0 -O2 $DEFS $INC -c "$src" -o "$obj" 2>/dev/null; then
+              # .c files build with clang, C++ with clang++ — the
+              # proven host/iOS split (the flex lexer TU fails as C++).
+              case "$src" in
+                *.c) CC="clang"; STD="" ;;
+                *)   CC="clang++"; STD="-std=gnu++17" ;;
+              esac
+              if $CC $STD -arch "$ARCH" -mmacosx-version-min=14.0 -O1 -w $DEFS $INC -c "$src" -o "$obj" 2>/dev/null; then
                 echo x >> "$OBJDIR/progress.log"
-              elif clang++ -std=c++17 -arch "$ARCH" -mmacosx-version-min=14.0 -O2 $DEFS $INC -c "$src" -o "$obj"; then
+              elif $CC $STD -arch "$ARCH" -mmacosx-version-min=14.0 -O1 -w $DEFS $INC -c "$src" -o "$obj"; then
                 echo x >> "$OBJDIR/progress.log"
               else
                 echo "$src" >> "$OBJDIR/failures.log"
@@ -107,7 +117,7 @@ jobs:
             HB_PID=$!
             export -f compile_one
             { find OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c'; echo Facade/occt_facade.cpp; } > "$OBJDIR/sources.txt"
-            xargs -P "$(sysctl -n hw.ncpu)" -I{} bash -c 'compile_one "$@"' _ {} < "$OBJDIR/sources.txt"
+            xargs -P "$(sysctl -n hw.ncpu)" -I{} bash -c 'compile_one "$@"' _ {} < "$OBJDIR/sources.txt" || true
             kill $HB_PID 2>/dev/null || true
             echo "CascadeKit $ARCH: $(wc -l < "$OBJDIR/progress.log") compiled, $(wc -l < "$OBJDIR/failures.log") failed, $(wc -l < "$OBJDIR/sources.txt") sources"
             if [ -s "$OBJDIR/failures.log" ]; then
@@ -115,7 +125,7 @@ jobs:
               cat "$OBJDIR/failures.log"
               exit 1
             fi
-            test -f "$OBJDIR/$(echo "Facade/occt_facade.cpp" | md5 -q).o" || { echo "KIT BUILD FAILED — facade object missing"; exit 1; }
+            test -f "$OBJDIR/$(printf '%s' "Facade/occt_facade.cpp" | md5 -q).o" || { echo "KIT BUILD FAILED — facade object missing"; exit 1; }
             ar rcs "$LIBDIR/libCascadeKit.a" "$OBJDIR"/*.o
             cd ..
             echo "CascadeKit $1 built: $(lipo -archs "$3/libCascadeKit.a")"
