@@ -66,8 +66,17 @@ jobs:
       - name: Build CascadeKits (only the archs whose cache missed)
         run: |
           set -euo pipefail
+          # Mirrors the proven build-ipa.yml kit build exactly (same
+          # include set: EVERY directory under OCCT/src plus the
+          # generated-headers dir; same source list: all OCCT sources
+          # + Facade/occt_facade.cpp, into which the patch step has
+          # already injected the mc_additions implementations — there
+          # is no separate mc_additions.cpp). One fix over the proven
+          # step: compile_one records failures in failures.log
+          # instead of letting the progress echo mask them, and the
+          # step fails loudly if any translation unit is missing.
           build_kit() {
-            # $1 = arch, $2 = objdir, $3 = libdir
+            # $1 = arch, $2 = objdir (abs), $3 = libdir (abs)
             if [ -f "$3/libCascadeKit.a" ]; then
               echo "CascadeKit $1: cache hit, skipping build"
               return 0
@@ -75,31 +84,44 @@ jobs:
             echo "CascadeKit $1: cache MISS — compiling OCCT (takes a while)"
             export ARCH="$1" OBJDIR="$2" LIBDIR="$3"
             mkdir -p "$OBJDIR" "$LIBDIR"
+            cd cascade-port-src
             DEFS="-DHAVE_IOS_DISABLED_FEATURES -D__USE_XOPEN -DHAVE_XLOCALE_H -DHAVE_XLIB -DHAVE_CLANG -DHAVE_TBB_DISABLED -DHAVE_VTK_DISABLED -DHAVE_OPENGL_DISABLED -DOCCT_NO_PLUGINS -DHAVE_D3D_DISABLED -DHAVE_GLES2_DISABLED -DHAVE_SAMPLES_DISABLED -DHAVE_TESTS_DISABLED"
-            INC="-Icascade-port-src/Facade"
-            for d in cascade-port-src/OCCT/src/*/; do INC="$INC -I$d"; done
+            INC="-IFacade -IOCCT/generated"
+            while IFS= read -r d; do INC="$INC -I$d"; done < <(find OCCT/src -type d | sort)
             export DEFS INC
             : > "$OBJDIR/progress.log"
+            : > "$OBJDIR/failures.log"
             compile_one() {
               src="$1"
               obj="$OBJDIR/$(echo "$src" | md5 -q).o"
-              [ -f "$obj" ] && return 0
-              if ! clang++ -std=c++17 -arch "$ARCH" -mmacosx-version-min=14.0 -O2 $DEFS $INC -c "$src" -o "$obj" 2>/dev/null; then
-                clang++ -std=c++17 -arch "$ARCH" -mmacosx-version-min=14.0 -O2 $DEFS $INC -c "$src" -o "$obj"
+              [ -f "$obj" ] && { echo x >> "$OBJDIR/progress.log"; return 0; }
+              if clang++ -std=c++17 -arch "$ARCH" -mmacosx-version-min=14.0 -O2 $DEFS $INC -c "$src" -o "$obj" 2>/dev/null; then
+                echo x >> "$OBJDIR/progress.log"
+              elif clang++ -std=c++17 -arch "$ARCH" -mmacosx-version-min=14.0 -O2 $DEFS $INC -c "$src" -o "$obj"; then
+                echo x >> "$OBJDIR/progress.log"
+              else
+                echo "$src" >> "$OBJDIR/failures.log"
               fi
-              echo x >> "$OBJDIR/progress.log"
             }
-            ( while true; do sleep 60; echo "CascadeKit $ARCH: $(wc -l < "$OBJDIR/progress.log") files compiled"; done ) &
+            ( while true; do sleep 60; echo "CascadeKit $ARCH: $(wc -l < "$OBJDIR/progress.log") compiled, $(wc -l < "$OBJDIR/failures.log") failed"; done ) &
             HB_PID=$!
             export -f compile_one
-            { find cascade-port-src/OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c'; echo cascade-port-src/Facade/occt_facade.cpp; echo cascade-port-src/Facade/mc_additions.cpp; } | xargs -P "$(sysctl -n hw.ncpu)" -I{} bash -c 'compile_one "$@"' _ {}
+            { find OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c'; echo Facade/occt_facade.cpp; } > "$OBJDIR/sources.txt"
+            xargs -P "$(sysctl -n hw.ncpu)" -I{} bash -c 'compile_one "$@"' _ {} < "$OBJDIR/sources.txt"
             kill $HB_PID 2>/dev/null || true
-            echo "CascadeKit $ARCH: $(wc -l < "$OBJDIR/progress.log") files compiled"
+            echo "CascadeKit $ARCH: $(wc -l < "$OBJDIR/progress.log") compiled, $(wc -l < "$OBJDIR/failures.log") failed, $(wc -l < "$OBJDIR/sources.txt") sources"
+            if [ -s "$OBJDIR/failures.log" ]; then
+              echo "KIT BUILD FAILED — uncompilable translation units:"
+              cat "$OBJDIR/failures.log"
+              exit 1
+            fi
+            test -f "$OBJDIR/$(echo "Facade/occt_facade.cpp" | md5 -q).o" || { echo "KIT BUILD FAILED — facade object missing"; exit 1; }
             ar rcs "$LIBDIR/libCascadeKit.a" "$OBJDIR"/*.o
-            echo "CascadeKit $1 built: $(lipo -archs "$LIBDIR/libCascadeKit.a")"
+            cd ..
+            echo "CascadeKit $1 built: $(lipo -archs "$3/libCascadeKit.a")"
           }
-          build_kit arm64 build/kitobj-arm build/kitlib-arm
-          build_kit x86_64 build/kitobj-x86 build/kitlib-x86
+          build_kit arm64 "$GITHUB_WORKSPACE/build/kitobj-arm" "$GITHUB_WORKSPACE/build/kitlib-arm"
+          build_kit x86_64 "$GITHUB_WORKSPACE/build/kitobj-x86" "$GITHUB_WORKSPACE/build/kitlib-x86"
 
       - name: Lipo CascadeKit universal + build Layer-2 engine (both archs)
         run: |
