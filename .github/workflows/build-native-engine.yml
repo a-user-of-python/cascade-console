@@ -25,6 +25,9 @@ on:
       # have run the very gate built to protect those files).
       - "Shared/Viewer/**"
       - "Shared/Models/**"
+      # v0.3.0: the harness also executes the production model layer
+      # (Shared/Model) against the mc namespace fixture.
+      - "Shared/Model/**"
       - ".github/workflows/build-native-engine.yml"
 
 jobs:
@@ -174,18 +177,24 @@ jobs:
           MATRIX_TMP="$(mktemp -d)"
           ./build/test_matrix_mc "$MATRIX_TMP" Core/scripts/demo.ccs
 
-      # Swift viewer harness (v0.2.3, extended v0.2.4): the gate that
-      # EXECUTES the production Swift viewer code. The fixture is the
-      # mc backend's own cc_view_data output (device path, CCFX v2
-      # with census edges); the harness binary is compiled from the
-      # production Swift sources (MeshBuffer, EngineMeshAdapter,
-      # EngineProtocol, SharedModels, SceneHelpers, ViewCommands,
-      # ViewerBridge, Camera, SceneStore) plus the harness main, and
-      # asserts the geometry survives the adapter + loader AND the
-      # renderer's GPU vertex-layout contracts — mesh (the v0.2.2
-      # fan) and line (the v0.2.3 fan: LineVertex stride 48/offset 32
-      # vs the shipped 32/16) — plus the v0.2.4 line builders, edge
-      # round-trip, and view rotate / labels-edges parsing + camera.
+      # Swift viewer harness (v0.2.3, extended v0.2.4 + v0.3.0): the
+      # gate that EXECUTES the production Swift viewer code. The
+      # fixture is the mc backend's own cc_view_data output (device
+      # path, CCFX v2 with census edges); the harness binary is
+      # compiled from the production Swift sources (MeshBuffer,
+      # EngineMeshAdapter, EngineProtocol, SharedModels, SceneHelpers,
+      # ViewCommands, ViewerBridge, Camera, SceneStore) plus the
+      # harness main, and asserts the geometry survives the adapter +
+      # loader AND the renderer's GPU vertex-layout contracts — mesh
+      # (the v0.2.2 fan) and line (the v0.2.3 fan: LineVertex stride
+      # 48/offset 32 vs the shipped 32/16) — plus the v0.2.4 line
+      # builders, edge round-trip, and view rotate / labels-edges
+      # parsing + camera. v0.3.0 adds the production MODEL layer
+      # (Shared/Model: CascadeNames, CommandSpecs, ModelStep,
+      # ProjectFile) checked against a second fixture the same tool
+      # dumps: a 10-step UI scenario executed on the mc backend, whose
+      # engine-assigned qualified names + volumes the Swift
+      # ReplayBuilder must reproduce exactly.
       - name: Generate view-data fixture (mc backend)
         run: |
           clang++ -std=c++17 -O2 \
@@ -195,7 +204,7 @@ jobs:
             build/engine-host/libCascadeConsoleEngineHost.a \
             build/kitlib-host/libCascadeKitHost.a \
             -lc++ -o build/dump_view_fixture
-          ./build/dump_view_fixture build/fixture.ccfx
+          ./build/dump_view_fixture build/fixture.ccfx build/fixture_ns.txt
 
       - name: Build + run Swift viewer harness (production parser + layout contract)
         run: |
@@ -209,6 +218,10 @@ jobs:
             Shared/Viewer/Swift/SceneStore.swift \
             Shared/Engine/EngineProtocol.swift \
             Shared/Models/SharedModels.swift \
+            Shared/Model/CascadeNames.swift \
+            Shared/Model/CommandSpecs.swift \
+            Shared/Model/ModelStep.swift \
+            Shared/Model/ProjectFile.swift \
             Shared/Viewer/Verification/swift-harness/main.swift \
             -o build/swift_viewer_harness
-          ./build/swift_viewer_harness build/fixture.ccfx
+          ./build/swift_viewer_harness build/fixture.ccfx build/fixture_ns.txt

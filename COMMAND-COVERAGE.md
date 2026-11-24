@@ -2,6 +2,8 @@
 
 Generated at integration from `docs/catalog/catalog.json` (251 catalog commands) plus the one app-layer session command added by resolution (a) = **252 rows**.
 
+> **v0.3.0 note:** the iPad app's Build panel lists only the 15 implemented step commands (box, cylinder, sphere, cone, torus, profile, extrude, union, cut, intersect, fillet, chamfer, translate, rotate, copy). Names now live in per-command directories (`dir:name` keys, per-directory uniqueness, auto-suffix on collision, documented resolution order) — see `docs/catalog/COMMAND_CATALOG.md` Conventions and `FIXLOG.md` v0.3.0. The statuses below are unchanged by the redesign.
+
 Status meanings:
 - **implemented-in-prototype** — the Python reference interpreter in `Core/` executes it end-to-end today (host, OCCT 7.8).
 - **facade-ready** — every OCCT toolkit the command needs is present in the staged cascade-port OCCT 8.0.1 tree (35 toolkits); what remains is Layer-2 dispatch in the C++ session interpreter and, where Layer 1 has no wrap yet, a new `mc_*` function. NOT yet executable.

@@ -54,6 +54,14 @@
 		90FD1C108B098E0BE134F790 /* EngineMeshAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98B633CEE57121D15B66A51 /* EngineMeshAdapter.swift */; };
 		B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E37E3031BB95344C6955ECEB /* Renderer.swift */; };
 		5CE1A11E55AA202411240002 /* SceneHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE1A11E55AA202411240001 /* SceneHelpers.swift */; };
+		CC30A11E55AA202411300002 /* CascadeNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300001 /* CascadeNames.swift */; };
+		CC30A11E55AA202411300004 /* CommandSpecs.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300003 /* CommandSpecs.swift */; };
+		CC30A11E55AA202411300006 /* ModelStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300005 /* ModelStep.swift */; };
+		CC30A11E55AA202411300008 /* ProjectFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300007 /* ProjectFile.swift */; };
+		CC30A11E55AA202411300012 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300011 /* HistoryView.swift */; };
+		CC30A11E55AA202411300014 /* PropertiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300013 /* PropertiesView.swift */; };
+		CC30A11E55AA202411300016 /* CommandPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300015 /* CommandPanelView.swift */; };
+		CC30A11E55AA202411300018 /* LeftPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300017 /* LeftPanelView.swift */; };
 		738671A8703034CAE1F7D60D /* SceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A541D50550CEACC7F3A9E026 /* SceneStore.swift */; };
 		461CDBA82AC4277FDB20D6E9 /* ViewCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */; };
 		D70372D4EE9FE86D52566BA0 /* ViewerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E632BCF1CBCAB36F1726BDEC /* ViewerBridge.swift */; };
@@ -91,6 +99,14 @@
 		E98B633CEE57121D15B66A51 /* EngineMeshAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EngineMeshAdapter.swift"; sourceTree = "<group>"; };
 		E37E3031BB95344C6955ECEB /* Renderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Renderer.swift"; sourceTree = "<group>"; };
 		5CE1A11E55AA202411240001 /* SceneHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SceneHelpers.swift"; sourceTree = "<group>"; };
+		CC30A11E55AA202411300001 /* CascadeNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CascadeNames.swift"; sourceTree = "<group>"; };
+		CC30A11E55AA202411300003 /* CommandSpecs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandSpecs.swift"; sourceTree = "<group>"; };
+		CC30A11E55AA202411300005 /* ModelStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModelStep.swift"; sourceTree = "<group>"; };
+		CC30A11E55AA202411300007 /* ProjectFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectFile.swift"; sourceTree = "<group>"; };
+		CC30A11E55AA202411300011 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HistoryView.swift"; sourceTree = "<group>"; };
+		CC30A11E55AA202411300013 /* PropertiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PropertiesView.swift"; sourceTree = "<group>"; };
+		CC30A11E55AA202411300015 /* CommandPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPanelView.swift"; sourceTree = "<group>"; };
+		CC30A11E55AA202411300017 /* LeftPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LeftPanelView.swift"; sourceTree = "<group>"; };
 		A541D50550CEACC7F3A9E026 /* SceneStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SceneStore.swift"; sourceTree = "<group>"; };
 		80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewCommands.swift"; sourceTree = "<group>"; };
 		E632BCF1CBCAB36F1726BDEC /* ViewerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewerBridge.swift"; sourceTree = "<group>"; };
@@ -148,6 +164,10 @@
 				8E1F180B8BD186E8D481B7B8 /* ObjectListView.swift */,
 				28D75BCA5677032AD4DFF12F /* SettingsView.swift */,
 				52606AD54B5D233086AE504B /* WelcomeView.swift */,
+				CC30A11E55AA202411300011 /* HistoryView.swift */,
+				CC30A11E55AA202411300013 /* PropertiesView.swift */,
+				CC30A11E55AA202411300015 /* CommandPanelView.swift */,
+				CC30A11E55AA202411300017 /* LeftPanelView.swift */,
 			);
 			path = "Views";
 			sourceTree = "<group>";
@@ -196,6 +216,17 @@
 				E034BCF1E391B4C8D6CA64BD /* SharedModels.swift */,
 			);
 			path = "Models";
+			sourceTree = "<group>";
+		};
+		CC30A11E55AA202411300000 /* Model */ = {
+			isa = PBXGroup;
+			children = (
+				CC30A11E55AA202411300001 /* CascadeNames.swift */,
+				CC30A11E55AA202411300003 /* CommandSpecs.swift */,
+				CC30A11E55AA202411300005 /* ModelStep.swift */,
+				CC30A11E55AA202411300007 /* ProjectFile.swift */,
+			);
+			path = "Model";
 			sourceTree = "<group>";
 		};
 		F587AA3BA1A8AA5E809DA0BC /* Settings */ = {
@@ -253,6 +284,7 @@
 				CB719A6DDAE7311B6322D77E /* Console */,
 				2D1BA25FFCD5EECFCFE5F5BC /* Engine */,
 				A5B4047FDFBFAC5511CE65B3 /* Models */,
+				CC30A11E55AA202411300000 /* Model */,
 				F587AA3BA1A8AA5E809DA0BC /* Settings */,
 				F3324BA22340016A37D1693C /* Resources */,
 				D8214CD24BB9DD7297AE46BF /* Viewer */,
@@ -386,6 +418,14 @@
 				90FD1C108B098E0BE134F790 /* EngineMeshAdapter.swift in Sources */,
 				B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */,
 				5CE1A11E55AA202411240002 /* SceneHelpers.swift in Sources */,
+				CC30A11E55AA202411300002 /* CascadeNames.swift in Sources */,
+				CC30A11E55AA202411300004 /* CommandSpecs.swift in Sources */,
+				CC30A11E55AA202411300006 /* ModelStep.swift in Sources */,
+				CC30A11E55AA202411300008 /* ProjectFile.swift in Sources */,
+				CC30A11E55AA202411300012 /* HistoryView.swift in Sources */,
+				CC30A11E55AA202411300014 /* PropertiesView.swift in Sources */,
+				CC30A11E55AA202411300016 /* CommandPanelView.swift in Sources */,
+				CC30A11E55AA202411300018 /* LeftPanelView.swift in Sources */,
 				738671A8703034CAE1F7D60D /* SceneStore.swift in Sources */,
 				461CDBA82AC4277FDB20D6E9 /* ViewCommands.swift in Sources */,
 				D70372D4EE9FE86D52566BA0 /* ViewerBridge.swift in Sources */,
@@ -448,7 +488,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -459,7 +499,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.2.4;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -472,7 +512,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -483,7 +523,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.2.4;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

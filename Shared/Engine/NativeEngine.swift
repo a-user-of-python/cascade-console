@@ -101,6 +101,25 @@ public final class NativeEngine: CascadeEngine, EngineViewDataProviding {
         }
     }
 
+    /// Profile names in the session (v0.3.0), qualified keys in
+    /// session order — the part tree's profile/ group and the step
+    /// layer's name set.
+    public func profileNames() async -> [String] {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                guard let session else { continuation.resume(returning: []); return }
+                var names: [String] = []
+                let count = cc_profile_count(session)
+                for i in 0..<count {
+                    if let cName = cc_profile_name(session, i) {
+                        names.append(String(cString: cName))
+                    }
+                }
+                continuation.resume(returning: names)
+            }
+        }
+    }
+
     /// Tessellation for one object (or all when `name` is nil), in the
     /// cc_view_data layout the Metal viewer consumes (via the CCM1
     /// adapter in Shared/Viewer/Swift/EngineMeshAdapter.swift).

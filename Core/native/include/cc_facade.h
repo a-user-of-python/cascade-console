@@ -83,6 +83,8 @@ int         cc_last_error_line(CCSession* s);       // script line, 0 if n/a
 // ---- model inspection (for UI lists / inspector panels) -------------------------
 int         cc_object_count(CCSession* s);
 const char* cc_object_name(CCSession* s, int index);  // session-owned, do not free
+int         cc_profile_count(CCSession* s);
+const char* cc_profile_name(CCSession* s, int index);  // session-owned, do not free
 int         cc_object_stats(CCSession* s, const char* name,
                             double* volume, double* area,
                             double bboxOut[6], int* faces, int* edges);

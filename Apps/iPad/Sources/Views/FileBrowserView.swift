@@ -136,6 +136,10 @@ struct FileBrowserView: View {
                 }
             }
             Spacer()
+            if item.kind == .project {
+                Button("Open") { state.openProject(item: item) }
+                    .buttonStyle(.bordered)
+            }
             if item.kind == .script {
                 Button("Open") { openScript(item) }
                     .buttonStyle(.bordered)
@@ -144,6 +148,8 @@ struct FileBrowserView: View {
                     state.runScript(state.scriptBuffer)
                 }
                 .buttonStyle(.bordered)
+                Button("Import") { state.importScriptAsProject(item: item) }
+                    .buttonStyle(.bordered)
             }
             Button(role: .destructive) {
                 pendingDelete = item
@@ -181,6 +187,7 @@ struct FileBrowserView: View {
     private func iconName(for kind: CascadeFileKind) -> String {
         switch kind {
         case .script: return "doc.text"
+        case .project: return "square.stack.3d.up"
         case .model: return "cube"
         case .other: return "doc"
         }

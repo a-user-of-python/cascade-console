@@ -69,10 +69,12 @@ CCError badExpression(const std::string& tok, const std::string& why) {
 CCError undefinedName(const std::string& kind, const std::string& n) {
   return CCError(UNDEFINED_NAME, "UNDEFINED_NAME", "No " + kind + " named '" + n + "' exists yet.");
 }
-CCError duplicateName(const std::string& kind, const std::string& n) {
-  return CCError(DUPLICATE_NAME, "DUPLICATE_NAME",
-                 "A " + kind + " named '" + n + "' already exists. Delete it first ('delete " + n + "') or pick another name.");
-}
+// NOTE (v0.3.0): there is deliberately no duplicateName() error
+// constructor anymore — the session layer auto-suffixes a
+// same-directory duplicate instead of raising E1006 (see claimName
+// and the name-directories comment on CCSession). The DUPLICATE_NAME
+// code stays in the table above; the Python reference prototype
+// still raises it (documented divergence, FIXLOG v0.3.0).
 CCError invalidParam(const std::string& m) { return CCError(INVALID_PARAM, "INVALID_PARAM", m); }
 
 // ---- formatting (match Python's str/format for the values we print) ---------
@@ -234,6 +236,7 @@ const char* const kHelpLines[] = {
   "translate <name> <src> <dx> <dy> <dz> — moved copy of src",
   "rotate <name> <src> <ax> <ay> <az> <deg> [about x,y,z] — rotated copy",
   "copy <name> <src> / rename <new> <old> / delete <name> / clear",
+  "names live in per-command directories (box:part, cut:part) — a name must be unique only within its directory; a duplicate in the same directory is auto-suffixed (part -> part2); write dir:name when a bare name is ambiguous",
   "list / info <name> / volume <name> — inspect the model",
   "undo / redo / history — command history",
   "export step|stl <path> [name] — write CAD/mesh files",
@@ -283,14 +286,128 @@ struct CCSession {
       throw CCError(BAD_NAME, "BAD_NAME", "'" + n + "' is not a valid " + kind +
                     " name — use letters, digits and underscores, starting with a letter.");
   }
-  void freshName(const std::string& n, const std::string& kind = "object") {
-    checkName(n, kind);
-    if (objects.count(n) || profiles.count(n)) throw duplicateName(kind, n);
+
+  // ---- name directories (v0.3.0) --------------------------------------
+  // Every object and profile lives in a DIRECTORY named after the
+  // command that created it (box/, cylinder/, cut/, fillet/, ...).
+  // Session keys are qualified "dir:name"; the display name (after the
+  // colon) is what the UI shows. Uniqueness is PER-DIRECTORY only: a
+  // box named "part" and a cut named "part" coexist as box:part and
+  // cut:part. Creating with a display name already taken IN THE SAME
+  // directory auto-suffixes (part -> part2 -> part3, incrementing a
+  // trailing number) instead of failing — E1006 DUPLICATE_NAME is no
+  // longer produced by this session layer (the Python reference
+  // prototype keeps the old error; documented divergence, FIXLOG
+  // v0.3.0). Aliases share their canonical command's directory:
+  // fuse -> union, common -> intersect, duplicate -> copy.
+  //
+  // RESOLUTION ORDER for an operand token (every operand of every
+  // command, the sim host, and the C API's name-taking entry points):
+  //   1. "dir:name" qualified token -> that exact key, or UNDEFINED.
+  //   2. The context directory, when the operand's role implies one
+  //      (extrude's profile operand -> profile/).
+  //   3. A bare display name matching exactly ONE key across all
+  //      directories -> that key (this keeps every pre-v0.3.0 script
+  //      working unchanged, since its names are unique).
+  //   4. A bare display name matching SEVERAL keys -> UNDEFINED_NAME
+  //      (E1005) whose message lists the directories and shows the
+  //      qualified form to use. Never a silent guess.
+  static std::string directoryFor(const std::string& cmd) {
+    if (cmd == "fuse") return "union";
+    if (cmd == "common") return "intersect";
+    if (cmd == "duplicate") return "copy";
+    return cmd;
   }
-  CCGeomShape* object(const std::string& n) {
-    auto it = objects.find(n);
-    if (it == objects.end()) throw undefinedName("object", n);
-    return it->second;
+  static std::string qualify(const std::string& dir, const std::string& name) {
+    return dir + ":" + name;
+  }
+  static std::string keyDirectory(const std::string& key) {
+    auto p = key.find(':');
+    return p == std::string::npos ? "" : key.substr(0, p);
+  }
+  static std::string keyDisplay(const std::string& key) {
+    auto p = key.find(':');
+    return p == std::string::npos ? key : key.substr(p + 1);
+  }
+  static bool splitQualified(const std::string& token, std::string& dir, std::string& name) {
+    auto p = token.find(':');
+    if (p == std::string::npos) return false;
+    dir = token.substr(0, p);
+    name = token.substr(p + 1);
+    return true;
+  }
+  bool nameTaken(const std::string& dir, const std::string& display) const {
+    const std::string key = qualify(dir, display);
+    return objects.count(key) || profiles.count(key);
+  }
+  // Claim a result name inside `dir`: the requested display name when
+  // free there, else the first free numeric suffix (trailing number
+  // incremented: part -> part2, part2 -> part3). Validates the name.
+  std::string claimName(const std::string& dir, const std::string& requested) {
+    checkName(requested);
+    if (!nameTaken(dir, requested)) return qualify(dir, requested);
+    std::string stem = requested;
+    long n = 1;
+    size_t i = requested.size();
+    while (i > 0 && std::isdigit((unsigned char)requested[i - 1])) --i;
+    if (i < requested.size()) {
+      stem = requested.substr(0, i);
+      n = std::atol(requested.c_str() + i);
+    }
+    for (long k = n + 1;; ++k) {
+      std::string cand = stem + std::to_string(k);
+      if (!nameTaken(dir, cand)) return qualify(dir, cand);
+    }
+  }
+  std::string resolveObjectKey(const std::string& token, const std::string& contextDir = "") {
+    std::string dir, name;
+    if (splitQualified(token, dir, name)) {
+      const std::string key = qualify(dir, name);
+      if (objects.count(key)) return key;
+      throw undefinedName("object", token);
+    }
+    if (!contextDir.empty()) {
+      const std::string key = qualify(contextDir, token);
+      if (objects.count(key)) return key;
+    }
+    std::string found, dirs;
+    int matches = 0;
+    for (auto& kv : objects) {
+      if (keyDisplay(kv.first) == token) {
+        ++matches;
+        found = kv.first;
+        if (!dirs.empty()) dirs += ", ";
+        dirs += keyDirectory(kv.first);
+      }
+    }
+    if (matches == 1) return found;
+    if (matches > 1)
+      throw CCError(UNDEFINED_NAME, "UNDEFINED_NAME",
+                    "The name '" + token + "' exists in more than one directory (" + dirs +
+                    ") — write it qualified, e.g. '" + found + "'.");
+    throw undefinedName("object", token);
+  }
+  std::string resolveProfileKey(const std::string& token) {
+    std::string dir, name;
+    if (splitQualified(token, dir, name)) {
+      const std::string key = qualify(dir, name);
+      if (profiles.count(key)) return key;
+      throw undefinedName("profile", token);
+    }
+    const std::string key = qualify("profile", token);
+    if (profiles.count(key)) return key;
+    throw undefinedName("profile", token);
+  }
+  bool tryResolveObjectKey(const std::string& token, std::string& keyOut) {
+    try {
+      keyOut = resolveObjectKey(token);
+      return true;
+    } catch (CCError&) {
+      return false;
+    }
+  }
+  CCGeomShape* object(const std::string& token) {
+    return objects[resolveObjectKey(token)];
   }
   double num(const std::string& token) {
     std::string t;
@@ -537,7 +654,7 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
           throw arity(cmd, "write: " + cmd + " <name> <" + std::to_string(nNums) + " number(s)> [at x,y,z]");
         name = args[0]; numToks = head(tail(args, 1), (size_t)nNums); rest = tail(args, 1 + (size_t)nNums);
       }
-      freshName(name);
+      checkName(name);
       std::vector<double> nums;
       for (auto& t : numToks) nums.push_back(num(t));
       double at[3]; bool hasAt = placement(rest, at);
@@ -560,14 +677,15 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
         checkPositive("ring radius", nums[0]); checkPositive("tube radius", nums[1]);
         shape = callShape("torus", [&](int* e) { return ccgeom_torus(nums[0], nums[1], e); });
       }
-      objects[name] = place(shape, hasAt ? at : nullptr);
-      result = "Created " + name + ".";
+      std::string key = claimName(directoryFor(cmd), name);
+      objects[key] = place(shape, hasAt ? at : nullptr);
+      result = "Created " + keyDisplay(key) + ".";
       goto done;
     }
     // ---- profile / extrude -------------------------------------------------------
     if (cmd == "profile") {
       if (args.size() < 4) throw arity("profile", "write: profile <name> x,y x,y x,y [...]");
-      freshName(args[0], "profile");
+      checkName(args[0], "profile");
       std::vector<std::pair<double, double>> pts;
       for (size_t i = 1; i < args.size(); ++i) {
         auto pt = point(args[i]);
@@ -575,8 +693,9 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
         pts.push_back({pt[0], pt[1]});
       }
       if (pts.size() < 3) throw CCError(BAD_PROFILE, "BAD_PROFILE", "A profile needs at least 3 points.");
-      profiles[args[0]] = pts;
-      result = "Profile " + args[0] + ": " + std::to_string(pts.size()) + " points.";
+      std::string key = claimName("profile", args[0]);
+      profiles[key] = pts;
+      result = "Profile " + keyDisplay(key) + ": " + std::to_string(pts.size()) + " points.";
       goto done;
     }
     if (cmd == "extrude") {
@@ -589,15 +708,19 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
         if (args.size() != 3) throw arity("extrude", "write: extrude <name> <profile> <dist>");
         name = args[0]; prof = args[1]; distTok = args[2];
       }
-      freshName(name);
-      auto it = profiles.find(prof);
-      if (it == profiles.end()) throw undefinedName("profile", prof);
+      checkName(name);
+      // The profile operand resolves in the profile/ directory first
+      // (resolution rule 2), so a profile and an object may share a
+      // display name without colliding here.
+      std::string profKey = resolveProfileKey(prof);
+      auto it = profiles.find(profKey);
       double dist = num(distTok);
       checkPositive("extrude distance", dist);
       std::vector<double> xy;
       for (auto& p : it->second) { xy.push_back(p.first); xy.push_back(p.second); }
-      objects[name] = callShape("extrude", [&](int* e) { return ccgeom_prism(xy.data(), (int)it->second.size(), dist, e); });
-      result = "Created " + name + ".";
+      std::string key = claimName("extrude", name);
+      objects[key] = callShape("extrude", [&](int* e) { return ccgeom_prism(xy.data(), (int)it->second.size(), dist, e); });
+      result = "Created " + keyDisplay(key) + ".";
       goto done;
     }
     // ---- booleans ------------------------------------------------------------------
@@ -610,13 +733,24 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
       if (hasAs) {
         if (work.size() != 2) throw arity(cmd, "write: " + cmd + " <a> <b> as <name>");
         a = work[0]; b = work[1];
-        if (name == a || name == b) checkName(name); else freshName(name);
       } else {
         if (args.size() != 3) throw arity(cmd, "write: " + cmd + " <name> <a> <b>");
         name = args[0]; a = args[1]; b = args[2];
-        freshName(name);
       }
-      CCGeomShape* sa = object(a); CCGeomShape* sb = object(b);
+      checkName(name);
+      std::string keyA = resolveObjectKey(a), keyB = resolveObjectKey(b);
+      CCGeomShape* sa = objects[keyA]; CCGeomShape* sb = objects[keyB];
+      // In-place catalog form ('fuse a b as a'): when the result name
+      // is an operand's display name, the result TAKES that operand's
+      // qualified key (and directory) and replaces it. Otherwise the
+      // result is claimed in this command's directory, auto-suffixed
+      // on a same-directory collision — a box and a cut may both be
+      // named 'a' without any error.
+      std::string resultKey;
+      bool inPlace = false;
+      if (hasAs && name == keyDisplay(keyA)) { resultKey = keyA; inPlace = true; }
+      else if (hasAs && name == keyDisplay(keyB)) { resultKey = keyB; inPlace = true; }
+      else resultKey = claimName(directoryFor(cmd), name);
       CCGeomShape* r = nullptr;
       const char* op = (cmd == "cut") ? "cut" : (cmd == "intersect" || cmd == "common") ? "intersect" : "union";
       if (cmd == "cut") r = callShape(op, [&](int* e) { return ccgeom_subtract(sa, sb, e); });
@@ -626,11 +760,14 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
         ccgeom_free(r);
         throw CCError(EMPTY_RESULT, "EMPTY_RESULT", std::string(op) + " produced an empty shape — check the inputs overlap / sizes.");
       }
-      // In-place catalog form ('fuse a b as a'): release the overwritten handle.
-      auto existing = objects.find(name);
-      if (existing != objects.end() && existing->second != r) ccgeom_free(existing->second);
-      objects[name] = r;
-      result = "Created " + name + ".";
+      // In-place: release the overwritten handle (r is a fresh shape;
+      // the operands themselves are never consumed by the boolean).
+      if (inPlace) {
+        auto existing = objects.find(resultKey);
+        if (existing != objects.end() && existing->second != r) ccgeom_free(existing->second);
+      }
+      objects[resultKey] = r;
+      result = "Created " + keyDisplay(resultKey) + ".";
       goto done;
     }
     // ---- finishing --------------------------------------------------------------------
@@ -641,13 +778,12 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
       if (hasAs) {
         if (before.size() < 2) throw arity(cmd, "write: " + cmd + " <src> <size> [edges i,j,...] as <name>");
         src = before[0]; sizeTok = before[1]; restToks = tail(before, 2);
-        if (objects.count(name) && name != src) throw duplicateName("object", name);
         checkName(name);
       } else {
         if (args.size() != 3 && args.size() != 5)
           throw arity(cmd, "write: " + cmd + " <name> <src> <size> [edges i,j,...]");
         name = args[0]; src = args[1]; sizeTok = args[2]; restToks = tail(args, 3);
-        freshName(name);
+        checkName(name);
       }
       // edge list
       std::vector<int> indices; const int* idxPtr = nullptr;
@@ -665,7 +801,15 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
           throw arity(cmd, "expected 'edges i,j,...'.");
         }
       }
-      CCGeomShape* srcShape = object(src);
+      std::string srcKey = resolveObjectKey(src);
+      CCGeomShape* srcShape = objects[srcKey];
+      // In-place catalog form ('fillet src 1 as src'): the result
+      // takes the source's qualified key; otherwise it is claimed in
+      // this command's directory (auto-suffix on collision).
+      std::string resultKey;
+      bool inPlace = false;
+      if (hasAs && name == keyDisplay(srcKey)) { resultKey = srcKey; inPlace = true; }
+      else resultKey = claimName(directoryFor(cmd), name);
       double size = num(sizeTok);
       checkPositive(cmd == "fillet" ? "fillet radius" : "chamfer distance", size);
       // BAD_EDGE_INDEX message parity with the prototype (needs the count):
@@ -680,10 +824,12 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
       CCGeomShape* r = (cmd == "fillet")
           ? callShape("fillet", [&](int* e) { return ccgeom_fillet(srcShape, size, idxPtr, (int)indices.size(), e); })
           : callShape("chamfer", [&](int* e) { return ccgeom_chamfer(srcShape, size, idxPtr, (int)indices.size(), e); });
-      auto existing = objects.find(name);
-      if (existing != objects.end() && existing->second != r) ccgeom_free(existing->second);
-      objects[name] = r;
-      result = "Created " + name + ".";
+      if (inPlace) {
+        auto existing = objects.find(resultKey);
+        if (existing != objects.end() && existing->second != r) ccgeom_free(existing->second);
+      }
+      objects[resultKey] = r;
+      result = "Created " + keyDisplay(resultKey) + ".";
       goto done;
     }
     // ---- transforms ----------------------------------------------------------------------
@@ -697,11 +843,12 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
         if (args.size() != 5) throw arity("translate", "write: translate <name> <src> <dx> <dy> <dz>");
         name = args[0]; src = args[1]; deltaToks = tail(args, 2);
       }
-      freshName(name);
+      checkName(name);
       double m[12] = {1, 0, 0, num(deltaToks[0]), 0, 1, 0, num(deltaToks[1]), 0, 0, 1, num(deltaToks[2])};
       CCGeomShape* s = object(src);
-      objects[name] = callShape("translate", [&](int* e) { return ccgeom_transform(s, m, e); });
-      result = "Created " + name + ".";
+      std::string key = claimName("translate", name);
+      objects[key] = callShape("translate", [&](int* e) { return ccgeom_transform(s, m, e); });
+      result = "Created " + keyDisplay(key) + ".";
       goto done;
     }
     if (cmd == "rotate") {
@@ -716,7 +863,7 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
           throw arity("rotate", "write: rotate <name> <src> <ax> <ay> <az> <angleDeg> [about x,y,z]");
         name = args[0]; src = args[1]; axisToks = head(tail(args, 2), 3); angleTok = args[5]; tailToks = tail(args, 6);
       }
-      freshName(name);
+      checkName(name);
       double axis[3] = {num(axisToks[0]), num(axisToks[1]), num(axisToks[2])};
       double angle = num(angleTok);
       double centre[3] = {0, 0, 0};
@@ -740,29 +887,32 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
       double tz = centre[2] - (R[6] * centre[0] + R[7] * centre[1] + R[8] * centre[2]);
       double m[12] = {R[0], R[1], R[2], tx, R[3], R[4], R[5], ty, R[6], R[7], R[8], tz};
       CCGeomShape* sh = object(src);
-      objects[name] = callShape("rotate", [&](int* e) { return ccgeom_transform(sh, m, e); });
-      result = "Created " + name + ".";
+      std::string key = claimName("rotate", name);
+      objects[key] = callShape("rotate", [&](int* e) { return ccgeom_transform(sh, m, e); });
+      result = "Created " + keyDisplay(key) + ".";
       goto done;
     }
     // ---- object management ------------------------------------------------------------------
     if (cmd == "copy") {
       if (args.size() != 2) throw arity("copy", "write: copy <newName> <src>");
-      freshName(args[0]);
+      checkName(args[0]);
       CCGeomShape* c = ccgeom_clone(object(args[1]));
       if (!c) throw CCError(GEOMETRY_FAILED, "GEOMETRY_FAILED", std::string("copy failed inside Open CASCADE: ") + ccgeom_last_error());
-      objects[args[0]] = c;
-      result = "Copied " + args[1] + " to " + args[0] + ".";
+      std::string key = claimName("copy", args[0]);
+      objects[key] = c;
+      result = "Copied " + args[1] + " to " + keyDisplay(key) + ".";
       goto done;
     }
     if (cmd == "duplicate") {
       std::string name; std::vector<std::string> before;
       if (!splitAs(args, cmd, name, before) || before.size() != 1)
         throw arity("duplicate", "write: duplicate <src> as <newName>");
-      freshName(name);
+      checkName(name);
       CCGeomShape* c = ccgeom_clone(object(before[0]));
       if (!c) throw CCError(GEOMETRY_FAILED, "GEOMETRY_FAILED", std::string("duplicate failed inside Open CASCADE: ") + ccgeom_last_error());
-      objects[name] = c;
-      result = "Copied " + before[0] + " to " + name + ".";
+      std::string key = claimName("copy", name);
+      objects[key] = c;
+      result = "Copied " + before[0] + " to " + keyDisplay(key) + ".";
       goto done;
     }
     if (cmd == "rename") {
@@ -774,28 +924,55 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
         if (args.size() != 2) throw arity("rename", "write: rename <newName> <oldName>");
         newName = args[0]; oldName = args[1];
       }
-      freshName(newName);
-      CCGeomShape* shape = object(oldName);
-      objects.erase(oldName);
-      objects[newName] = shape;
-      result = "Renamed " + oldName + " to " + newName + ".";
+      checkName(newName);
+      // A rename keeps the object's directory (the directory records
+      // the CREATING command); only the display name changes, claimed
+      // within that same directory (auto-suffix on collision).
+      std::string oldKey = resolveObjectKey(oldName);
+      std::string newKey = (newName == keyDisplay(oldKey))
+          ? oldKey
+          : claimName(keyDirectory(oldKey), newName);
+      CCGeomShape* shape = objects[oldKey];
+      if (newKey != oldKey) {
+        objects.erase(oldKey);
+        objects[newKey] = shape;
+      }
+      result = "Renamed " + keyDisplay(oldKey) + " to " + keyDisplay(newKey) + ".";
       goto done;
     }
     if (cmd == "delete") {
       if (args.size() != 1) throw arity("delete", "write: delete <name>");
-      auto io = objects.find(args[0]);
-      if (io != objects.end()) { ccgeom_free(io->second); objects.erase(io); }
-      else if (profiles.count(args[0])) profiles.erase(args[0]);
-      else throw undefinedName("object or profile", args[0]);
-      result = "Deleted " + args[0] + ".";
+      // Objects first (resolution rules apply, ambiguity included),
+      // then profiles.
+      std::string dir, nm;
+      bool qual = splitQualified(args[0], dir, nm);
+      bool objExists = qual ? (objects.count(qualify(dir, nm)) > 0)
+                            : [&] { for (auto& kv : objects) if (keyDisplay(kv.first) == args[0]) return true; return false; }();
+      if (objExists) {
+        std::string key = resolveObjectKey(args[0]);
+        auto io = objects.find(key);
+        ccgeom_free(io->second);
+        objects.erase(io);
+        result = "Deleted " + keyDisplay(key) + ".";
+      } else {
+        bool profExists = qual ? (profiles.count(qualify(dir, nm)) > 0)
+                               : (profiles.count(qualify("profile", args[0])) > 0);
+        if (!profExists) throw undefinedName("object or profile", args[0]);
+        std::string key = resolveProfileKey(args[0]);
+        profiles.erase(key);
+        result = "Deleted " + keyDisplay(key) + ".";
+      }
       goto done;
     }
     if (cmd == "list") {
       std::vector<std::string> lines;
+      // Objects print with their qualified key (dir:name) — that IS
+      // their identity since v0.3.0; profiles print their display
+      // name (their directory is always profile/).
       for (auto& kv : objects)
         lines.push_back("object  " + kv.first + ": volume " + fmtF(volumeOf(kv.second), 3) + " mm^3");
       for (auto& kv : profiles)
-        lines.push_back("profile " + kv.first + ": " + std::to_string(kv.second.size()) + " points");
+        lines.push_back("profile " + keyDisplay(kv.first) + ": " + std::to_string(kv.second.size()) + " points");
       for (auto& kv : vars)
         lines.push_back("var     " + kv.first + " = " + fmtPyFloat(kv.second));
       if (lines.empty()) result = "Nothing defined yet.";
@@ -879,11 +1056,14 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
       for (auto& t : targets) {
         std::string path = args[1];
         if (targets.size() > 1) {
+          // Per-target file names use the DISPLAY name — the
+          // qualified key's ':' is not a portable file-name character.
+          std::string disp = keyDisplay(t.first);
           size_t dot = path.find_last_of('.');
           size_t slash = path.find_last_of('/');
           if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
-            path = path.substr(0, dot) + "_" + t.first + path.substr(dot);
-          else path = path + "_" + t.first;
+            path = path.substr(0, dot) + "_" + disp + path.substr(dot);
+          else path = path + "_" + disp;
         }
         if (kind == "step") callOk("export-step", [&](int* e) { return ccgeom_export_step(t.second, path.c_str(), e); });
         else callOk("export-stl", [&](int* e) { return ccgeom_export_stl(t.second, path.c_str(), e); });
@@ -904,7 +1084,10 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
     if (cmd == "view") {
       if (args.empty() || args.size() > 3) throw arity("view", "write: view <path.json> [name] [deflection]");
       std::vector<std::pair<std::string, CCGeomShape*>> targets;
-      if (args.size() >= 2) targets.push_back({args[1], object(args[1])});
+      if (args.size() >= 2) {
+        std::string key = resolveObjectKey(args[1]);
+        targets.push_back({key, objects[key]});
+      }
       else for (auto& kv : objects) targets.push_back(kv);
       if (targets.empty()) throw undefinedName("object", "");
       double deflection = args.size() == 3 ? num(args[2]) : 0.5;
@@ -1030,10 +1213,26 @@ const char* cc_object_name(CCSession* s, int index) {
   return nullptr;
 }
 
+int cc_profile_count(CCSession* s) { return s ? (int)s->profiles.size() : 0; }
+
+const char* cc_profile_name(CCSession* s, int index) {
+  if (!s || index < 0) return nullptr;
+  int i = 0;
+  for (auto& kv : s->profiles) {
+    if (i == index) return kv.first.c_str();
+    ++i;
+  }
+  return nullptr;
+}
+
 int cc_object_stats(CCSession* s, const char* name, double* volume, double* area,
                     double bboxOut[6], int* faces, int* edges) {
   if (!s || !name) return UNDEFINED_NAME;
-  auto it = s->objects.find(name);
+  // Name-taking C API entry points resolve through the same
+  // directory rules as command operands (v0.3.0).
+  std::string key;
+  if (!s->tryResolveObjectKey(name, key)) return UNDEFINED_NAME;
+  auto it = s->objects.find(key);
   if (it == s->objects.end()) return UNDEFINED_NAME;
   try {
     if (volume) *volume = s->volumeOf(it->second);
@@ -1049,7 +1248,9 @@ int cc_object_stats(CCSession* s, const char* name, double* volume, double* area
 
 struct MCFacadeShape* cc_borrow_shape(CCSession* s, const char* name) {
   if (!s || !name) return nullptr;
-  auto it = s->objects.find(name);
+  std::string key;
+  if (!s->tryResolveObjectKey(name, key)) return nullptr;
+  auto it = s->objects.find(key);
   if (it == s->objects.end()) return nullptr;
   // ccgeom_native_handle is backend-defined: the mc backend returns the
   // MCFacadeShape*; the direct-OCCT and mock backends return nullptr
@@ -1069,13 +1270,14 @@ int cc_view_data(CCSession* s, const char* nameOrNull, double deflectionMM,
   }
   std::vector<std::pair<std::string, CCGeomShape*>> targets;
   if (nameOrNull) {
-    auto it = s->objects.find(nameOrNull);
-    if (it == s->objects.end()) {
-      CCError e = undefinedName("object", nameOrNull);
+    std::string key;
+    try {
+      key = s->resolveObjectKey(nameOrNull);
+    } catch (CCError& e) {
       setLast(s, e);
       return e.code;
     }
-    targets.push_back(*it);
+    targets.push_back({key, s->objects[key]});
   } else {
     for (auto& kv : s->objects) targets.push_back(kv);
   }

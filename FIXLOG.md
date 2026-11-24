@@ -938,3 +938,125 @@ is the final judge: the fan should be GONE (grid + small XYZ
 arrows only), `view rotate 45 30` should swing the camera,
 `view labels edges on` should number the box's 12 edges with
 the fillet/chamfer census indices.
+
+## v0.3.0 — UI-first redesign: history, part tree, command UI, name directories (2026-11-24)
+
+Commissioned 2026-11-24: (1) add a history; (2) add a part tree
+with folders; (3) replace typed command entry with a UI — a RIGHT
+sidebar holds the command UI with sliders/inputs, the properties
+inspector moves LEFT, names are auto-assigned when none is given;
+(4) separate name directories per command type, so a box and a cut
+can share a name. The standing ship rule applies unchanged: the
+per-command matrix on the real mc backend must be green, and the
+Swift harness must execute the new production model-layer code
+against real backend fixtures before any IPA ships.
+
+### Design choices (where the commission left a detail open)
+
+- **Architecture.** The native engine + interpreter remain the
+  execution layer. The UI is a parametric layer of STEPS (command +
+  parameter values + result name) in `Shared/Model/`. Editing or
+  deleting a step replays the step list into a FRESH engine session
+  and adopts it only on full success; a failed replay leaves the
+  current model untouched and reports the failing step by number
+  and title — never a silent partial model. View commands are NOT
+  steps (viewer state, unchanged).
+- **One editor surface.** The right sidebar holds the command list;
+  below it, ONE editor: in Add mode it edits the selected command's
+  form; selecting a history step or a part switches it to that
+  step's parameters (Apply = replay). Documented choice per the
+  commission's either/or.
+- **Console.** Demoted, not deleted: on iPad it is a toolbar sheet
+  (regular width) / a tab (compact). Scripts, exports, `set`, and
+  the `sim` family live there. Objects created by typing console
+  commands are session-only — they are not steps, and the next
+  replay rebuilds the session from the step list alone. Stated
+  here rather than discovered by the user.
+- **UI command list.** Only the 15 implemented step commands:
+  box, cylinder, sphere, cone, torus, profile, extrude, union, cut,
+  intersect, fillet, chamfer, translate, rotate, copy. Forms are
+  generated from parameter specs (`Shared/Model/CommandSpecs.swift`):
+  sliders paired with numeric fields (typed value always wins;
+  ranges generous: lengths 0.1–500 mm etc., documented in the
+  specs), object/profile references are pickers fed from the
+  session (never free text), fillet/chamfer edge lists are optional
+  text (blank = all edges — the numbers are the viewer's census
+  edge labels). Unimplemented catalog commands do NOT appear.
+- **Layout.** Regular width: LEFT = segmented panel (Parts tree /
+  History / Properties — the inspector moved from the right),
+  CENTRE = viewport, RIGHT = command UI. Compact: tabs Model /
+  Build / Library / Console / Files.
+
+### Name directories — real, in the session layer
+
+Implemented in `Core/native/src/cc_interpreter.cpp`, not as a UI
+cosmetic. Session keys are qualified `dir:name`; the directory is
+the canonical creating command (aliases fold: fuse→union,
+common→intersect, duplicate→copy; profiles live in profile/).
+
+- Creating never errors because ANOTHER directory holds the name:
+  box "part" and cut "part" coexist.
+- Within one directory names are unique: a colliding create is
+  AUTO-SUFFIXED (part → part2, and a trailing number increments:
+  part2 → part3), and a name omitted at the console keeps the old
+  auto-numbering (now per-directory). Consequence, stated plainly:
+  the C++ session no longer produces E1006 DUPLICATE_NAME (the
+  code remains in the error enum; the Python reference prototype
+  still implements the old error and is unchanged — a documented
+  divergence).
+- Resolution order for a name used as an operand (also in
+  docs/catalog/COMMAND_CATALOG.md): (1) qualified `dir:name` exact;
+  (2) the context directory the position expects (extrude's profile
+  operand → profile/); (3) a bare display name matching exactly ONE
+  key across directories; (4) several matches → E1005, listing the
+  directories and a qualified example — never a silent guess.
+  In-place forms (`fuse a b as a`, `fillet ... as <source>`) take
+  the operand's own qualified key/directory. Rename keeps the
+  object's directory. `list` prints qualified keys; result messages
+  print display names. cc_object_stats / cc_view_data / the C API
+  resolve through the same rules; new cc_profile_count /
+  cc_profile_name expose the profile directory to the app.
+- The Swift mirror (`CascadeNames.uniqueName/autoName`) implements
+  the identical claim rule so the UI can show the exact name a
+  create will claim; the harness pins the parity against the real
+  backend (below).
+
+### Persistence + migration
+
+New project format `.cascadeproj` (JSON: format tag + version,
+steps with params + assigned qualified names, folders, object→
+folder assignments by qualified name, viewer snapshot: grid/axes/
+labels/display mode/camera angles). Reopening replays the steps —
+history, tree and model restore exactly; no mesh data is stored.
+Autosave is unchanged (script buffer on background, labelled as
+before); project saving is explicit (Save Project / Save As in the
+toolbar) so a half-edited history is never silently persisted.
+Legacy `.cascade` scripts still load two ways: Open/Run as scripts
+(unchanged), and **Import** in the Files tab, which migrates one to
+a project whose history is a SINGLE "Imported script" step holding
+the script text verbatim, replayed through the script runner. Its
+commands are NOT reverse-engineered into parametric steps — that
+is the honest limit of the migration.
+
+### Gates extended (the v0.2.2–v0.2.4 lesson, applied to the new layer)
+
+- Engine suites gained a namespace section (~28 checks: cross-
+  directory coexistence, qualified resolution + volumes, ambiguity
+  E1005, suffix + trailing-increment, profile-context resolution,
+  rename/delete directory behaviour, in-place fuse, full replay
+  name-set reproduction). Local: OCCT 153 pass / mock 129 pass +
+  5 skip, sim 35/35.
+- The mc per-command matrix gained the same namespace cases plus
+  cylinder coexistence, an extrude volume assertion, and a replay
+  block (125 baseline + new).
+- The Swift harness now also compiles `Shared/Model/` and runs it
+  against a NEW fixture the mc dump tool produces: a 10-step UI
+  scenario executed on the real backend (engine-verified assigned
+  names + analytic volumes, final name set, fresh-session replay
+  proven engine-side). The harness asserts the production
+  ReplayBuilder reproduces the engine's lines, predicted names and
+  grouping byte-for-byte, plus CascadeNames parity cases, spec
+  sanity, project round-trip, legacy migration shape, and folder
+  rules. The CCFX fixture's object names are now qualified
+  (box:test / cylinder:cyl) and the harness's name-keyed checks
+  were updated to match.

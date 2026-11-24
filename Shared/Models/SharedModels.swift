@@ -96,10 +96,11 @@ public extension Color {
 
 /// File kinds the apps understand, keyed by lowercase path extension.
 public enum CascadeFileKind: Equatable {
-    case script, model, other
+    case script, model, project, other
     public static func kind(forExtension ext: String) -> CascadeFileKind {
         switch ext.lowercased() {
         case "cascade", "ccs", "txt": return .script
+        case "cascadeproj": return .project
         case "step", "stp", "iges", "igs", "stl", "brep", "obj", "gltf", "ply", "vrml": return .model
         default: return .other
         }

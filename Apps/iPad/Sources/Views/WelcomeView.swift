@@ -10,8 +10,8 @@ struct WelcomeView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Label("Cascade Console", systemImage: "cube.transparent")
                     .font(.title2.weight(.semibold))
-                Text("Text-command 3D modelling powered by Open CASCADE. Type commands in the console, create objects, then look at them in the 3D view.")
-                Text("A welcome script and a sample project were saved into the app's Documents folder — open them from the Files tab. Files there are browsed in-app, so everything works even if the system file picker does not.")
+                Text("3D modelling powered by Open CASCADE — now built from a UI, not typed commands. Pick a command in the Build panel on the right, set its values with the sliders and fields, and the part appears in the 3D view. Everything you make becomes a step in the History (left panel): select a step to change its values and the model rebuilds.")
+                Text("Parts live in the tree on the left, grouped by the command that made them (box/, cut/, ...) and in folders you create — a box and a cut can share the same name. Save Project (toolbar) stores the history, folders and view as a .cascadeproj file; older .cascade scripts still open from the Files tab (Import makes one a project). The text console is still there — toolbar, terminal icon — for scripts, exports and simulation.")
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 10) {
                     Button {
@@ -34,9 +34,9 @@ struct WelcomeView: View {
 
                     Button {
                         dismiss()
-                        state.run(command: "help")
+                        state.runScript(ExampleScript.sampleProject)
                     } label: {
-                        Label("Just show me the commands", systemImage: "terminal")
+                        Label("Run the sample project now", systemImage: "play.fill")
                     }
                     .buttonStyle(.bordered)
                 }

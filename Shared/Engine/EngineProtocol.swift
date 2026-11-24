@@ -156,8 +156,17 @@ public struct EngineViewDataResult {
 public protocol EngineViewDataProviding: AnyObject {
     /// Session object names, in session order.
     func objectNames() async -> [String]
+    /// Session profile names (v0.3.0), qualified ("profile:prof").
+    /// Profiles are 2D and never appear in view data, but the part
+    /// tree lists them and the step layer needs their names for
+    /// auto-naming parity with the engine.
+    func profileNames() async -> [String]
     /// Tessellation for one object, or every object when `name` is nil.
     /// A failed pull returns empty `objects` WITH `errorMessage` set —
     /// never a silent empty result.
     func viewData(name: String?) async -> EngineViewDataResult
+}
+
+public extension EngineViewDataProviding {
+    func profileNames() async -> [String] { [] }
 }

@@ -65,7 +65,8 @@ int main(int argc, char** argv) {
   check(rc == 0, "cc_execute box b 10 10 10 -> rc 0");
   cc_free_string(out); out = nullptr;
   check(cc_object_count(s) == 1, "session holds exactly 1 object");
-  check(std::string(cc_object_name(s, 0)) == "b", "object 0 is named 'b'");
+  check(std::string(cc_object_name(s, 0)) == "box:b",
+        "object 0 is named 'box:b' (v0.3.0 qualified key)");
 
   // ---- all-objects view data (the call the app makes after commands)
   CCViewData* objs = nullptr; int n = 0;
@@ -74,7 +75,7 @@ int main(int argc, char** argv) {
   check(n == 1, "cc_view_data(all) returns 1 object");
   if (rc == 0 && n == 1) {
     const CCViewData& d = objs[0];
-    check(std::string(d.name) == "b", "view object name == 'b'");
+    check(std::string(d.name) == "box:b", "view object name == 'box:b'");
     // THE v0.2 regression assertions: these were all 0 in the shipped
     // build because the counts were read after mc_free_mesh().
     check(d.vertexCount > 0, "vertexCount > 0 (was 0 in v0.2)");

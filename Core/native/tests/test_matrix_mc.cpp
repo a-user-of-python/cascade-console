@@ -21,6 +21,7 @@
 // ============================================================================
 #include "cc_facade.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -29,6 +30,7 @@
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <vector>
 
 static int g_pass = 0, g_fail = 0;
 static void check(bool ok, const std::string& what) {
@@ -177,9 +179,9 @@ int main(int argc, char** argv) {
           "info: reports faces 6 for the renamed box");
     check(i.run("rename dup as rn") == 0, "rename (catalog 'as' form): rc 0");
     check(i.run("list", out) == 0 &&
-          out.find("object  a:") != std::string::npos &&
-          out.find("object  rn:") != std::string::npos,
-          "list: names the session objects");
+          out.find("object  box:a:") != std::string::npos &&
+          out.find("object  copy:rn:") != std::string::npos,
+          "list: names the session objects by qualified key (v0.3.0 directories)");
     check(i.run("delete d") == 0, "delete: rc 0");
     check(i.code("info d") == 1005, "delete: info on deleted name -> E1005");
     check(cc_object_count(i.s) == 2, "delete: session count drops to 2 (a, rn)");
@@ -395,6 +397,75 @@ int main(int argc, char** argv) {
       if (objs[0].edges[k].edgeIndex != k) seqOk = false;
     check(seqOk, "edges: indices are the 0-based census sequence");
     cc_free_view_data(objs, n);
+  }
+
+  // ---- name directories (v0.3.0) ---------------------------------------
+  // The UI's part tree, pickers and replay all stand on these rules:
+  // per-command directories, per-directory uniqueness with
+  // auto-suffix, qualified > context > unique-bare resolution, and
+  // replay reproducing a mixed-directory model exactly.
+  std::printf("== name directories (v0.3.0) ==\n");
+  { Session i;
+    check(i.run("box x 10 10 10") == 0, "ns: box x created (box:x)");
+    check(i.run("cylinder x 5 10") == 0, "ns: cylinder x coexists with box x");
+    check(i.run("box y 5 10 10") == 0, "ns: box y created (box:y)");
+    check(i.run("cut x box:x box:y") == 0, "ns: cut x coexists with box x (cut:x)");
+    check(i.run("copy x box:x") == 0, "ns: copy x coexists too (copy:x)");
+    check(cc_object_count(i.s) == 5, "ns: 5 objects across 4 directories");
+    check(near(i.volume("box:x"), 1000.0, 1e-6), "ns: volume box:x == 1000");
+    check(near(i.volume("cylinder:x"), PI * 250, 1e-3), "ns: volume cylinder:x == pi*250");
+    check(near(i.volume("cut:x"), 500.0, 1e-6),
+          "ns: volume cut:x == 500 (operands hit the intended objects)");
+    check(near(i.volume("copy:x"), 1000.0, 1e-6), "ns: volume copy:x == 1000");
+    check(i.code("volume x") == 1005, "ns: bare ambiguous name -> E1005 (no silent guess)");
+    std::string out;
+    check(i.run("box p 1 1 1") == 0, "ns: box p created");
+    check(i.run("box p 2 2 2", out) == 0 && out == "Created p2.",
+          "ns: duplicate in box/ auto-suffixes to box:p2, not an error");
+    check(near(i.volume("box:p"), 1.0, 1e-9) && near(i.volume("box:p2"), 8.0, 1e-9),
+          "ns: box:p == 1 and box:p2 == 8");
+    check(i.run("translate m box:p2 20 0 0") == 0, "ns: translate from box:p2");
+    check(i.run("union u box:p2 translate:m") == 0 && near(i.volume("union:u"), 16.0, 1e-6),
+          "ns: union of box:p2 + translate:m == 16 (operands exact across directories)");
+    check(i.run("profile prof 0,0 10,0 10,10 0,10") == 0, "ns: profile prof created");
+    check(i.run("box prof 1 1 1") == 0, "ns: box prof coexists with profile prof");
+    check(i.run("extrude e prof 5") == 0 && near(i.volume("extrude:e"), 500.0, 1e-4),
+          "ns: extrude resolves 'prof' in profile/ (context rule), volume == 500");
+    check(i.run("rename q box:p2") == 0 && i.code("info box:p2") == 1005 &&
+          near(i.volume("box:q"), 8.0, 1e-9),
+          "ns: rename keeps the directory (box:p2 -> box:q)");
+    check(i.run("delete cut:x") == 0 && i.code("volume cut:x") == 1005 &&
+          near(i.volume("box:x"), 1000.0, 1e-6),
+          "ns: delete cut:x removes only the cut");
+    int beforeCount = cc_object_count(i.s);
+    check(i.run("fuse box:x box:y as x") == 0, "ns: fuse ... as x (in-place) rc 0");
+    check(cc_object_count(i.s) == beforeCount && i.code("volume union:x") == 1005 &&
+          near(i.volume("box:x"), 1000.0, 1e-6),
+          "ns: in-place fuse takes box:x and creates no union:x");
+    // Replay of a mixed-directory step list into a fresh session
+    // reproduces the model: same qualified names, same volumes.
+    Session j;
+    const char* lines[] = {
+      "box x 10 10 10", "cylinder x 5 10", "box y 5 10 10",
+      "cut x box:x box:y", "copy x box:x",
+      "box p 1 1 1", "box p 2 2 2", "translate m box:p2 20 0 0",
+      "union u box:p2 translate:m",
+      "profile prof 0,0 10,0 10,10 0,10", "extrude e prof 5",
+    };
+    bool replayOk = true;
+    for (const char* l : lines) if (j.run(l) != 0) replayOk = false;
+    check(replayOk, "ns replay: mixed-directory lines all run in a fresh session");
+    std::vector<std::string> jnames;
+    for (int k = 0; k < cc_object_count(j.s); ++k) jnames.push_back(cc_object_name(j.s, k));
+    std::sort(jnames.begin(), jnames.end());
+    const std::vector<std::string> expect = {"box:p", "box:p2", "box:x", "box:y",
+                                             "copy:x", "cut:x", "cylinder:x",
+                                             "extrude:e", "translate:m", "union:u"};
+    check(jnames == expect, "ns replay: qualified name set reproduces exactly");
+    check(near(j.volume("box:x"), 1000.0, 1e-6) && near(j.volume("cut:x"), 500.0, 1e-6) &&
+          near(j.volume("cylinder:x"), PI * 250, 1e-3) && near(j.volume("extrude:e"), 500.0, 1e-4) &&
+          near(j.volume("union:u"), 16.0, 1e-6),
+          "ns replay: volumes match the original session (incl. auto-suffixed box:p2)");
   }
 
   // ---- demo script (full pipeline) ------------------------------------------

@@ -1,9 +1,13 @@
 import SwiftUI
 
-/// Root layout.
-/// - Regular width (iPad): split view — sidebar objects, detail is the
-///   viewport over the console.
-/// - Compact width: tabs (Console / 3D View / Objects / Files).
+/// Root layout (v0.3.0 — the UI-first redesign).
+/// - Regular width (iPad): LEFT panel = Parts tree / History /
+///   Properties (segmented), CENTRE = the 3D viewport, RIGHT sidebar
+///   = the command UI (command list + parameter forms). The text
+///   console is no longer the home screen: it survives as a toolbar
+///   sheet here, because scripts, exports and the sim commands still
+///   live there — but building a model is a UI task now.
+/// - Compact width: tabs (Model / Build / Library / Console / Files).
 /// Settings and the script editor are reached from the toolbar in both.
 struct ContentView: View {
     @EnvironmentObject private var state: AppState
@@ -16,6 +20,10 @@ struct ContentView: View {
     @State private var showingFiles = false
     @State private var showingWelcome = false
     @State private var showingScriptEditor = false
+    @State private var showingConsole = false
+    @State private var confirmingNewProject = false
+    @State private var showingSaveProjectAs = false
+    @State private var saveProjectName = ""
 
     var body: some View {
         Group {
@@ -37,8 +45,42 @@ struct ContentView: View {
         .sheet(isPresented: $showingScriptEditor) {
             scriptEditorSheet
         }
+        .sheet(isPresented: $showingConsole) {
+            NavigationStack {
+                ConsoleView()
+                    .navigationTitle("Console")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showingConsole = false }
+                        }
+                    }
+            }
+        }
         .sheet(isPresented: $showingWelcome) {
             WelcomeView()
+        }
+        .alert("Save Project As", isPresented: $showingSaveProjectAs) {
+            TextField("Project file name", text: $saveProjectName)
+            Button("Save") {
+                if !saveProjectName.isEmpty {
+                    state.currentProjectName = saveProjectName
+                        .hasSuffix(".cascadeproj")
+                        ? saveProjectName : saveProjectName + ".cascadeproj"
+                }
+                state.saveProject()
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+        .confirmationDialog(
+            "Start a new project?",
+            isPresented: $confirmingNewProject,
+            titleVisibility: .visible) {
+            Button("New Project", role: .destructive) {
+                state.newProject()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("The current step history and model are cleared. Save the project first if you want to keep them.")
         }
         .onAppear {
             if !welcomeShown {
@@ -52,8 +94,9 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) {
             // Autosave (Settings) = save the script buffer whenever the
-            // app leaves the foreground. The interval setting is kept
-            // for a future timer-based refinement.
+            // app leaves the foreground, as before. Project saving is
+            // explicit (Save Project in the toolbar) so a half-edited
+            // history is never silently persisted.
             if scenePhase == .background && autosave {
                 state.saveBuffer()
             }
@@ -63,35 +106,17 @@ struct ContentView: View {
     // MARK: - iPad layout
 
     private var regularLayout: some View {
-        NavigationSplitView {
-            VStack(spacing: 0) {
-                ObjectListView()
+        NavigationStack {
+            HStack(spacing: 0) {
+                LeftPanelView()
+                    .frame(width: 300)
                 Divider()
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Quick files")
-                        .font(.headline)
-                    Button {
-                        showingFiles = true
-                    } label: {
-                        Label("Browse Documents", systemImage: "folder")
-                    }
-                    Button {
-                        showingScriptEditor = true
-                    } label: {
-                        Label("Script Editor", systemImage: "doc.text")
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .navigationTitle("Objects")
-        } detail: {
-            VStack(spacing: 0) {
-                ViewportView(renderer: state.renderer, objectCount: state.viewerObjectCount)
-                    .frame(maxHeight: .infinity)
+                ViewportView(renderer: state.renderer,
+                             objectCount: state.viewerObjectCount)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
-                ConsoleView()
-                    .frame(maxHeight: .infinity)
+                CommandPanelView()
+                    .frame(width: 320)
             }
             .navigationTitle("Cascade Console")
             .toolbar { detailToolbar }
@@ -103,23 +128,30 @@ struct ContentView: View {
     private var compactLayout: some View {
         TabView {
             NavigationStack {
-                ConsoleView()
-                    .navigationTitle("Console")
+                ViewportView(renderer: state.renderer,
+                             objectCount: state.viewerObjectCount)
+                    .navigationTitle("Model")
                     .toolbar { detailToolbar }
             }
+            .tabItem { Label("Model", systemImage: "cube") }
+
+            NavigationStack {
+                CommandPanelView()
+                    .navigationTitle("Build")
+            }
+            .tabItem { Label("Build", systemImage: "plus.square") }
+
+            NavigationStack {
+                LeftPanelView()
+                    .navigationTitle("Library")
+            }
+            .tabItem { Label("Library", systemImage: "list.bullet") }
+
+            NavigationStack {
+                ConsoleView()
+                    .navigationTitle("Console")
+            }
             .tabItem { Label("Console", systemImage: "terminal") }
-
-            NavigationStack {
-                ViewportView(renderer: state.renderer, objectCount: state.viewerObjectCount)
-                    .navigationTitle("3D View")
-            }
-            .tabItem { Label("3D View", systemImage: "cube") }
-
-            NavigationStack {
-                ObjectListView()
-                    .navigationTitle("Objects")
-            }
-            .tabItem { Label("Objects", systemImage: "list.bullet") }
 
             NavigationStack {
                 FileBrowserView(store: state.fileStore)
@@ -134,6 +166,27 @@ struct ContentView: View {
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
+            Button {
+                confirmingNewProject = true
+            } label: {
+                Label("New Project", systemImage: "doc.badge.plus")
+            }
+            Button {
+                state.saveProject()
+            } label: {
+                Label("Save Project", systemImage: "square.and.arrow.down")
+            }
+            Button {
+                saveProjectName = state.currentProjectName
+                showingSaveProjectAs = true
+            } label: {
+                Label("Save Project As", systemImage: "square.and.arrow.down.on.square")
+            }
+            Button {
+                showingConsole = true
+            } label: {
+                Label("Console", systemImage: "terminal")
+            }
             Button {
                 showingScriptEditor = true
             } label: {

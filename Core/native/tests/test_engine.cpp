@@ -93,9 +93,14 @@ int main(int argc, char** argv) {
   { Session i;
     check(i.code("cylinder c -1 10") == 2001, "invalid radius -> E2001");
     check(i.code("box b 1 1 1") == 0, "box ok");
-    check(i.code("box b 2 2 2") == 1006, "duplicate name -> E1006");
-    check(std::string(cc_last_error_name(i.s)) == "DUPLICATE_NAME", "last error name DUPLICATE_NAME");
-    check(near(i.volume("b"), 1.0, 1e-9), "original untouched after duplicate attempt");
+    // v0.3.0 name directories: a duplicate IN THE SAME directory no
+    // longer errors — it auto-suffixes (box:b -> box:b2). (The old
+    // E1006 expectation predates the directory spec; the Python
+    // reference prototype still raises E1006 — documented divergence.)
+    check(i.code("box b 2 2 2") == 0, "same-directory duplicate auto-suffixes (v0.3.0)");
+    check(near(i.volume("b"), 1.0, 1e-9), "original untouched after suffixed duplicate");
+    check(near(i.volume("box:b2"), 8.0, 1e-9), "suffixed duplicate lives at box:b2, volume 8");
+    check(near(i.volume("b2"), 8.0, 1e-9), "bare unique name b2 resolves to box:b2");
   }
   { Session i;
     i.run("box a 10 20 30");
@@ -193,7 +198,7 @@ int main(int argc, char** argv) {
     i.run("box a 1 1 1");
     int before = cc_history_count(i.s);
     (void)before;
-    check(i.code("box a 1 1 1") == 1006, "failed command (duplicate)");
+    check(i.code("cylinder a -1 5") == 2001, "failed command (invalid radius)");
     check(i.run("undo") == 0, "undo after failure ok");
     check(i.code("info a") == 1005, "failed command left no undo step (a undone)");
   }
@@ -226,7 +231,10 @@ int main(int argc, char** argv) {
     check(near(i.volume("u"), 1125.0, 1e-4), "script union volume == 1125");
     check(cc_execute_script(i.s, "/tmp/cc_no_such_file.ccs", &out) == 3001, "missing script -> E3001");
     const char* badPath = "/tmp/cc_test_bad.ccs";
-    { std::ofstream f(badPath); f << "box a 1 1 1\nbox a 1 1 1\n"; }
+    // Line 2 must genuinely fail: an invalid radius. (Pre-v0.3.0 this
+    // script used a duplicate name, which is no longer an error —
+    // same-directory duplicates auto-suffix now.)
+    { std::ofstream f(badPath); f << "box a 1 1 1\ncylinder a -1 5\n"; }
     Session j;
     check(cc_execute_script(j.s, badPath, &out) == 3004, "script failure -> E3004");
     check(cc_last_error_line(j.s) == 2, "script failure line == 2");
@@ -514,6 +522,75 @@ int main(int argc, char** argv) {
     if (rc == 0) check(near(i.volume("part3"), 30937.339, 0.01), "demo part3 volume == prototype 30937.339");
   }
 #endif
+  { // ---- name directories (v0.3.0) -----------------------------------
+    // Box-only geometry: exact on BOTH backends (the mock is exact for
+    // primitives, box booleans and transforms). The namespace rules
+    // themselves live in the interpreter, above either backend.
+    std::printf("== name directories (v0.3.0) ==\n");
+    Session i;
+    check(i.run("box x 10 10 10") == 0, "ns: box x created (box:x)");
+    check(i.run("box y 5 10 10") == 0, "ns: box y created (box:y)");
+    check(i.run("cut x box:x box:y") == 0, "ns: cut x coexists with box x (cut:x)");
+    check(i.run("copy x box:x") == 0, "ns: copy x coexists too (copy:x)");
+    check(cc_object_count(i.s) == 4, "ns: 4 objects across 3 directories");
+    check(near(i.volume("box:x"), 1000.0, 1e-6), "ns: volume box:x == 1000");
+    check(near(i.volume("cut:x"), 500.0, 1e-6), "ns: volume cut:x == 500 (operands hit the intended boxes)");
+    check(near(i.volume("copy:x"), 1000.0, 1e-6), "ns: volume copy:x == 1000");
+    check(i.code("volume x") == 1005, "ns: bare ambiguous name -> E1005 (no silent guess)");
+    std::string err = cc_last_error_message(i.s);
+    check(err.find("directory") != std::string::npos && err.find(":x") != std::string::npos,
+          "ns: ambiguity error names the directories + a qualified form");
+    // Same-directory duplicate: auto-suffix, never an error.
+    std::string out;
+    check(i.run("box p 1 1 1") == 0, "ns: box p created");
+    check(i.run("box p 2 2 2", out) == 0 && out == "Created p2.",
+          "ns: duplicate in box/ auto-suffixes to box:p2");
+    check(near(i.volume("box:p"), 1.0, 1e-9) && near(i.volume("box:p2"), 8.0, 1e-9),
+          "ns: box:p == 1 and box:p2 == 8");
+    check(i.run("box p2 3 3 3") == 0 && near(i.volume("box:p3"), 27.0, 1e-9),
+          "ns: suffix increments a trailing number (p2 -> box:p3)");
+    // Qualified operands hit the intended objects across directories.
+    check(i.run("translate m box:p2 20 0 0") == 0, "ns: translate from box:p2");
+    check(i.run("union u box:p2 translate:m") == 0 && near(i.volume("union:u"), 16.0, 1e-6),
+          "ns: union of box:p2 + translate:m == 16 (both operands exact)");
+    // Profile operand resolves in profile/ even when box/ has the name.
+    check(i.run("profile prof 0,0 10,0 10,10 0,10") == 0, "ns: profile prof created");
+    check(i.run("box prof 1 1 1") == 0, "ns: box prof coexists with profile prof");
+    check(i.run("extrude e prof 5") == 0, "ns: extrude resolves 'prof' to the profile, not the box");
+    if (!mock) check(near(i.volume("extrude:e"), 500.0, 1e-6), "ns: extrude volume == 500");
+    // Rename keeps the directory; delete can be qualified per directory.
+    check(i.run("rename q box:p2") == 0, "ns: rename box:p2 -> q");
+    check(i.code("info box:p2") == 1005 && near(i.volume("box:q"), 8.0, 1e-9),
+          "ns: renamed object stays in box/ as box:q");
+    check(i.run("delete cut:x") == 0 && i.code("volume cut:x") == 1005 &&
+          near(i.volume("box:x"), 1000.0, 1e-6),
+          "ns: delete cut:x removes only the cut");
+    // In-place catalog form: result takes the operand's key/directory.
+    int beforeCount = cc_object_count(i.s);
+    check(i.run("fuse box:x box:y as x") == 0, "ns: fuse ... as x (in-place) rc 0");
+    check(cc_object_count(i.s) == beforeCount && i.code("volume union:x") == 1005,
+          "ns: in-place fuse created no union:x");
+    check(near(i.volume("box:x"), 1000.0, 1e-6), "ns: in-place fuse result lives at box:x");
+    // Replay: the same lines into a fresh session reproduce the model.
+    Session j;
+    const char* lines[] = {
+      "box x 10 10 10", "box y 5 10 10", "cut x box:x box:y", "copy x box:x",
+      "box p 1 1 1", "box p 2 2 2", "translate m box:p2 20 0 0",
+      "union u box:p2 translate:m",
+    };
+    bool replayOk = true;
+    for (const char* l : lines) if (j.run(l) != 0) replayOk = false;
+    check(replayOk, "ns replay: scenario lines all run in a fresh session");
+    std::vector<std::string> jnames;
+    for (int k = 0; k < cc_object_count(j.s); ++k) jnames.push_back(cc_object_name(j.s, k));
+    std::sort(jnames.begin(), jnames.end());
+    const std::vector<std::string> expect = {"box:p", "box:p2", "box:x", "box:y",
+                                             "copy:x", "cut:x", "translate:m", "union:u"};
+    check(jnames == expect, "ns replay: qualified name set reproduces exactly");
+    check(near(j.volume("box:x"), 1000.0, 1e-6) && near(j.volume("cut:x"), 500.0, 1e-6) &&
+          near(j.volume("box:p2"), 8.0, 1e-9) && near(j.volume("union:u"), 16.0, 1e-6),
+          "ns replay: qualified names + volumes reproduce exactly (incl. auto-suffix)");
+  }
   std::printf("RESULT: %d pass, %d fail, %d skip (backend %s)\n", g_pass, g_fail, g_skip, backend);
   return g_fail == 0 ? 0 : 1;
 }

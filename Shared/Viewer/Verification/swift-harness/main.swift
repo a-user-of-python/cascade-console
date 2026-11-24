@@ -18,7 +18,17 @@
 //  SceneStore.swift) plus this file, and run against a CCFX fixture
 //  produced in the same job by the real engine
 //  (Core/native/tests/dump_view_fixture.cpp, mc backend):
-//  a 10x2x10 box and a cylinder, as cc_view_data returned them.
+//  a 10x2x10 box and a cylinder, as cc_view_data returned them
+//  (v0.3.0: under their qualified names box:test / cylinder:cyl).
+//
+//  v0.3.0 extends the same principle to the MODEL layer: the harness
+//  also compiles Shared/Model (CascadeNames, CommandSpecs, ModelStep,
+//  ProjectFile) and runs it against a second fixture from the same
+//  tool — a 10-step UI scenario the mc backend executed, with the
+//  engine-assigned qualified names and volumes — asserting the
+//  production ReplayBuilder reproduces the engine's lines, names,
+//  suffix behaviour and directory grouping exactly, plus the project
+//  file's Codable round-trip, legacy migration and folder rules.
 //
 //  Checks:
 //   * adapter + loader round-trip: counts, names, bbox, face groups
@@ -160,7 +170,7 @@ func derivedBBox(_ mesh: MeshObject) -> (SIMD3<Float>, SIMD3<Float>) {
 // MARK: - Run
 
 guard CommandLine.arguments.count > 1 else {
-    print("usage: swift_viewer_harness <fixture.ccfx>")
+    print("usage: swift_viewer_harness <fixture.ccfx> [fixture_ns.txt]")
     exit(2)
 }
 let fixture = loadFixture(CommandLine.arguments[1])
@@ -198,13 +208,13 @@ for (fx, mesh) in zip(fixture, meshes) {
                  hi.y <= Float(fx.bbox[4]) + 1e-3 && hi.z <= Float(fx.bbox[5]) + 1e-3
     check(inside, "\(fx.name): parsed vertices inside engine bbox")
 
-    if fx.name == "test" {
-        check(approx(vol, 200.0, 0.01), "test: signed volume == 200 (got \(vol))")
+    if fx.name == "box:test" {
+        check(approx(vol, 200.0, 0.01), "box:test: signed volume == 200 (got \(vol))")
         let exact = approx(Double(lo.x), 0, 1e-4) && approx(Double(lo.y), 0, 1e-4) &&
                     approx(Double(lo.z), 0, 1e-4) && approx(Double(hi.x), 10, 1e-4) &&
                     approx(Double(hi.y), 2, 1e-4) && approx(Double(hi.z), 10, 1e-4)
-        check(exact, "test: derived bbox == [0 0 0 .. 10 2 10] (got [\(lo) .. \(hi)])")
-        check(mesh.faceGroups.count == 6, "test: 6 face groups (got \(mesh.faceGroups.count))")
+        check(exact, "box:test: derived bbox == [0 0 0 .. 10 2 10] (got [\(lo) .. \(hi)])")
+        check(mesh.faceGroups.count == 6, "box:test: 6 face groups (got \(mesh.faceGroups.count))")
         var partition = mesh.faceGroups.count == 6
         var cursor: UInt32 = 0
         for (i, g) in mesh.faceGroups.enumerated() {
@@ -215,15 +225,15 @@ for (fx, mesh) in zip(fixture, meshes) {
             cursor += g.indexCount
         }
         if cursor != UInt32(mesh.indices.count) { partition = false }
-        check(partition, "test: face groups are census-ordered and partition the index buffer")
+        check(partition, "box:test: face groups are census-ordered and partition the index buffer")
     }
-    if fx.name == "cyl" {
+    if fx.name == "cylinder:cyl" {
         let analytic = Double.pi * 9.0 * 12.0
         check(vol > 0.95 * analytic && vol < 1.001 * analytic,
-              "cyl: signed volume within tessellation tolerance of \(analytic) (got \(vol))")
+              "cylinder:cyl: signed volume within tessellation tolerance of \(analytic) (got \(vol))")
         let reach = Double(hi.x - lo.x) > 5.4 && Double(hi.y - lo.y) > 5.4 &&
                     approx(Double(hi.z - lo.z), 12.0, 1e-3)
-        check(reach, "cyl: derived bbox reaches the engine bbox (size \(hi - lo))")
+        check(reach, "cylinder:cyl: derived bbox reaches the engine bbox (size \(hi - lo))")
     }
 
     // Census edges (v0.2.4): the fixture's cc_view_data edges must
@@ -244,8 +254,8 @@ for (fx, mesh) in zip(fixture, meshes) {
            !approx(Double(e.end.z), fx.edges[j].end[2], 1e-4) { edgeSeq = false }
     }
     check(edgeSeq, "\(fx.name): edge indices are the census sequence and endpoints are intact")
-    if fx.name == "test" {
-        check(mesh.edges.count == 12, "test: box carries 12 census edges (got \(mesh.edges.count))")
+    if fx.name == "box:test" {
+        check(mesh.edges.count == 12, "box:test: box carries 12 census edges (got \(mesh.edges.count))")
         func key(_ p: SIMD3<Float>) -> String {
             String(format: "%.3f,%.3f,%.3f", Double(p.x), Double(p.y), Double(p.z))
         }
@@ -264,7 +274,7 @@ for (fx, mesh) in zip(fixture, meshes) {
             let ka = key(e.start), kb = key(e.end)
             got.insert(ka < kb ? "\(ka)|\(kb)" : "\(kb)|\(ka)")
         }
-        check(got == want, "test: edge endpoint set == the box's 12 geometric edges")
+        check(got == want, "box:test: edge endpoint set == the box's 12 geometric edges")
     }
 
     // The GPU read contract — the v0.2.2 regression check. The
@@ -370,7 +380,7 @@ check(tips.count == 3 && tips[0].label == "X" && tips[1].label == "Y" && tips[2]
 
 // Edge-overlay builder on the parsed box mesh (production input: the
 // unwelded MeshObject the renderer holds).
-if let boxMesh = meshes.first(where: { $0.id == "test" }) {
+if let boxMesh = meshes.first(where: { $0.id == "box:test" }) {
     let overlay = SceneLineBuilder.meshEdgeLines(vertices: boxMesh.vertices,
                                                  indices: boxMesh.indices)
     check(overlay.count == 72,
@@ -444,7 +454,7 @@ check(parsed("view rotate 45") == nil && parsed("view rotate by 10") == nil &&
       "parse: malformed rotate/labels forms are rejected")
 
 let store = SceneStore()
-if let boxMesh = meshes.first(where: { $0.id == "test" }) {
+if let boxMesh = meshes.first(where: { $0.id == "box:test" }) {
     _ = store.load(boxMesh, props: ObjectDisplayProps())
 }
 if case .setCameraRotation(let az, let el) = parsed("view rotate 45 30") {
@@ -471,6 +481,200 @@ check(approx(Double(clampedCam.elevation), 89.9 * Double.pi / 180, 1e-5),
 check(MeshVertex.bufferStride == 32 && MeshVertex.bufferNormalOffset == 16,
       "MeshVertex memory layout is stride 32 / normal offset 16 (got \(MeshVertex.bufferStride)/\(MeshVertex.bufferNormalOffset))")
 check(MeshVertex.stride == 24, "CCM1 file stride stays 24 (packed file format)")
+
+// MARK: - Model layer (v0.3.0): names, specs, replay, project file
+//
+// The second fixture (fixture_ns.txt) was produced in the same CI
+// job by dump_view_fixture running a 10-step UI scenario on the REAL
+// mc backend: every step's engine-assigned qualified name and volume
+// was verified there against analytic values, the final object name
+// set recorded, and a fresh-session replay of the same lines proven
+// to reproduce it. Below, the PRODUCTION Swift model layer rebuilds
+// the identical steps and must agree with the engine exactly —
+// lines, auto-names, suffixes, directory grouping — and the project
+// file machinery (round-trip, legacy migration, folder rules) runs
+// its own checks. This is the v0.2.2/v0.2.3/v0.2.4 lesson applied to
+// the new layer: a production Swift path CI never executes is where
+// the next device bug lives.
+
+if CommandLine.arguments.count > 2 {
+    let nsPath = CommandLine.arguments[2]
+    let nsText = (try? String(contentsOfFile: nsPath, encoding: .utf8)) ?? ""
+    check(!nsText.isEmpty, "ns fixture: readable at \(nsPath)")
+    struct NSRow {
+        var command: String; var name: String; var params: [String: String]
+        var line: String; var assigned: String; var volume: Double
+    }
+    var nsRows: [NSRow] = []
+    var nsNames: [String] = []
+    var nsReplayOK = false
+    for rawLine in nsText.split(separator: "\n") {
+        let fields = rawLine.split(separator: "\t", omittingEmptySubsequences: false)
+            .map(String.init)
+        guard let kind = fields.first else { continue }
+        if kind == "step", fields.count == 7 {
+            var params: [String: String] = [:]
+            for pair in fields[3].split(separator: ";", omittingEmptySubsequences: false) {
+                let kv = pair.split(separator: "=", maxSplits: 1,
+                                    omittingEmptySubsequences: false).map(String.init)
+                if kv.count == 2 { params[kv[0]] = kv[1] }
+                else if kv.count == 1 { params[kv[0]] = "" }
+            }
+            nsRows.append(NSRow(command: fields[1], name: fields[2], params: params,
+                                line: fields[4], assigned: fields[5],
+                                volume: Double(fields[6]) ?? .nan))
+        } else if kind == "names", fields.count == 2 {
+            nsNames = fields[1].split(separator: ",").map(String.init)
+        } else if kind == "replay" {
+            nsReplayOK = fields.count == 2 && fields[1] == "ok"
+        }
+    }
+    check(nsRows.count == 10, "ns fixture: 10 scenario steps (got \(nsRows.count))")
+    check(nsReplayOK, "ns fixture: the engine-side fresh-session replay reproduced the model")
+
+    // The engine-verified volumes for the analytic steps (the dump
+    // tool asserted them against the backend; restated here so a
+    // fixture mix-up can't pass silently).
+    let analyticVolumes: [String: Double] = [
+        "box:part": 1000, "box:part2": 1000, "cylinder:cylinder1": 785.3981634,
+        "cut:part": 803.6504592, "translate:moved": 1000, "extrude:plate": 500,
+        "box:part3": 1000, "box:box1": 1,
+    ]
+    for row in nsRows {
+        if let want = analyticVolumes[row.assigned] {
+            check(approx(row.volume, want, 0.01),
+                  "ns fixture: \(row.assigned) volume == \(want) (got \(row.volume))")
+        }
+    }
+
+    // ReplayBuilder parity: the production builder, fed the same
+    // steps, must produce the engine's lines and predicted names.
+    let nsSteps = nsRows.map { ModelStep(command: $0.command, params: $0.params, name: $0.name) }
+    let built = ReplayBuilder.build(steps: nsSteps)
+    check(built.count == nsRows.count, "replay builder: one built step per scenario step")
+    for (b, row) in zip(built, nsRows) {
+        check(b.buildError == nil && b.line == row.line,
+              "replay builder: \(row.command) '\(row.name)' line == \"\(row.line)\" (got \"\(b.line ?? "nil")\")")
+        check(b.predictedName == row.assigned,
+              "replay builder: \(row.command) '\(row.name)' predicted name == \(row.assigned) (got \(b.predictedName ?? "nil"))")
+    }
+    let predictedObjects = built.compactMap { $0.predictedName }
+        .filter { CascadeNames.directory(of: $0) != "profile" }
+    check(Set(predictedObjects) == Set(nsNames),
+          "replay builder: final object name set == the engine's (\(nsNames.count) names)")
+
+    // Directory grouping of the final set (the part tree's shape).
+    let groups = CascadeNames.grouped(nsNames + ["profile:prof"])
+    check(groups.map { $0.directory } == ["box", "cylinder", "profile", "extrude", "cut", "fillet", "translate"],
+          "grouping: directories in canonical order (got \(groups.map { $0.directory }))")
+    check(groups.first { $0.directory == "box" }?.names ==
+          ["box:box1", "box:part", "box:part2", "box:part3"],
+          "grouping: box/ holds its four objects sorted, cut:part separate from box:part")
+
+    // CascadeNames unit parity with the engine's claim rule.
+    check(CascadeNames.uniqueName(directory: "box", requested: "part",
+                                  existing: ["box:part"]) == "part2",
+          "names: same-directory duplicate suffixes (part -> part2)")
+    check(CascadeNames.uniqueName(directory: "box", requested: "part2",
+                                  existing: ["box:part2"]) == "part3",
+          "names: trailing number increments (part2 -> part3)")
+    check(CascadeNames.uniqueName(directory: "box", requested: "x",
+                                  existing: ["cut:x"]) == "x",
+          "names: another directory's name never forces a suffix")
+    check(CascadeNames.autoName(directory: "box",
+                                existing: ["box:box1", "box:box3"]) == "box2",
+          "names: auto-name takes the lowest free number")
+    check(CascadeNames.autoName(directory: "cut", existing: []) == "cut1",
+          "names: auto-name in an empty directory is <command>1")
+    check(CascadeNames.directory(of: "cut:part") == "cut" &&
+          CascadeNames.display(of: "cut:part") == "part" &&
+          CascadeNames.qualify(directory: "cut", display: "part") == "cut:part",
+          "names: qualified/display split + join round-trips")
+
+    // CommandSpecs sanity: the UI list is exactly the implemented
+    // step commands, every one in a known directory + group.
+    check(CommandCatalog.all.count == 15,
+          "specs: 15 UI step commands (got \(CommandCatalog.all.count))")
+    check(CommandCatalog.all.allSatisfy { CascadeNames.directoryOrder.contains($0.directory) },
+          "specs: every command's directory is a known name directory")
+    check(CommandCatalog.all.allSatisfy { CommandCatalog.groupOrder.contains($0.group) },
+          "specs: every command sits in a displayed group")
+    check(CommandCatalog.all.allSatisfy { spec in
+        spec.defaultParams.count == spec.params.count &&
+        Set(spec.params.map { $0.key }).count == spec.params.count
+    }, "specs: defaults cover every parameter exactly once")
+    check(CommandCatalog.spec(for: "extrude")?.param("profile")?.type == .profileRef &&
+          CommandCatalog.spec(for: "cut")?.param("b")?.type == .objectRef &&
+          CommandCatalog.spec(for: "fillet")?.param("edges")?.defaultValue == "",
+          "specs: reference parameters are picker-fed, fillet edges default to all")
+
+    // StepLineBuilder rendering details the fixture doesn't cover.
+    check(StepLineBuilder.formatNumber("10") == "10" &&
+          StepLineBuilder.formatNumber("2.5") == "2.5" &&
+          StepLineBuilder.formatNumber(" -3 ") == "-3" &&
+          StepLineBuilder.formatNumber("abc") == nil,
+          "line builder: canonical number rendering")
+    let atStep = ModelStep(command: "box",
+                           params: ["width": "1", "depth": "1", "height": "1",
+                                    "atX": "5", "atY": "0", "atZ": "0"], name: "b")
+    check(StepLineBuilder.line(for: atStep, resultDisplayName: "b") == "box b 1 1 1 at 5,0,0",
+          "line builder: non-zero origin emits the at clause")
+    let rotStep = ModelStep(command: "rotate",
+                            params: ["source": "box:b", "axisX": "0", "axisY": "0",
+                                     "axisZ": "1", "angle": "45",
+                                     "aboutX": "1", "aboutY": "0", "aboutZ": "0"], name: "r")
+    check(StepLineBuilder.line(for: rotStep, resultDisplayName: "r") ==
+          "rotate r box:b 0 0 1 45 about 1,0,0",
+          "line builder: rotate emits the about clause only when non-zero")
+    let badStep = ModelStep(command: "box",
+                            params: ["width": "wide", "depth": "1", "height": "1",
+                                     "atX": "0", "atY": "0", "atZ": "0"], name: "b")
+    check(StepLineBuilder.line(for: badStep, resultDisplayName: "b") == nil,
+          "line builder: a non-numeric parameter fails the build instead of emitting a bad line")
+
+    // ProjectFile: Codable round-trip with steps, folders, viewer.
+    var project = ProjectFile()
+    project.steps = nsSteps
+    let asm = project.addFolder(name: "Assembly", parentID: nil)
+    let sub = project.addFolder(name: "Fasteners", parentID: asm.id)
+    project.moveObject("box:part", toFolder: sub.id)
+    project.viewer.grid = false
+    project.viewer.displayMode = "shadedEdges"
+    project.viewer.cameraAzimuthDegrees = 45
+    do {
+        let data = try project.encoded()
+        let back = try ProjectFile.decoded(from: data)
+        check(back == project, "project file: encode/decode round-trips steps, folders, assignments, viewer")
+        check(back.steps.count == 10 && back.folderID(forObject: "box:part") == sub.id,
+              "project file: step list and object->folder assignment survive")
+    } catch {
+        check(false, "project file: round-trip threw \(error)")
+    }
+    check((try? ProjectFile.decoded(from: Data("{\"format\":\"nope\"}".utf8))) == nil,
+          "project file: a foreign format tag is rejected")
+
+    // Folder rules: delete reparents children + objects upward.
+    var folderCase = project
+    folderCase.deleteFolder(id: sub.id)
+    check(folderCase.folderID(forObject: "box:part") == asm.id &&
+          folderCase.childFolders(of: asm.id).isEmpty,
+          "folders: deleting a folder moves its objects to the parent")
+    folderCase.deleteFolder(id: asm.id)
+    check(folderCase.folderID(forObject: "box:part") == nil && folderCase.folders.isEmpty,
+          "folders: deleting the parent then files objects at the root")
+    check(project.descendantFolderIDs(of: asm.id) == [sub.id],
+          "folders: descendant walk finds the nested folder")
+
+    // Legacy migration: one verbatim script step, replay-safe.
+    let legacy = ProjectFile.migrateLegacyScript("box a 1 1 1\nview a\n")
+    check(legacy.steps.count == 1 && legacy.steps[0].isScript &&
+          legacy.steps[0].scriptText == "box a 1 1 1\nview a\n",
+          "migration: a legacy script becomes exactly one verbatim script step")
+    let legacyBuilt = ReplayBuilder.build(steps: legacy.steps)
+    check(legacyBuilt.count == 1 && legacyBuilt[0].line == nil &&
+          legacyBuilt[0].predictedName == nil,
+          "migration: a script step builds to no parametric line (runs via the script runner)")
+}
 
 print("RESULT: \(passCount) pass, \(failCount) fail (swift viewer harness)")
 exit(failCount == 0 ? 0 : 1)

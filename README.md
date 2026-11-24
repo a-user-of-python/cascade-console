@@ -1,24 +1,30 @@
 # Cascade Console
 
-A text-command 3D modelling app for **Mac and iPad**, powered by
-**Open CASCADE Technology (OCCT)**. You type bare modelling commands
-in a console —
+A 3D modelling app for **Mac and iPad**, powered by **Open CASCADE
+Technology (OCCT)**. Since v0.3.0 the iPad app is **UI-first**: a
+command panel (right sidebar) holds the modelling commands with
+sliders and numeric fields; every part you create becomes a step in
+a parametric **history** (left panel) — select a step, change its
+values, and the model rebuilds. Parts live in a **part tree** with
+user folders and per-command **name directories** (a box and a cut
+can both be named "part"). The original text console is still
+there for scripts, exports and simulation —
 
 ```
-box 40 30 20 as plate
-cylinder 10 50 as shaft
+box plate 40 30 20
+cylinder shaft 10 50
 fuse plate shaft as part
 fillet part 2 as part
 view part
 export-step part bracket.step
 ```
 
-— and a separate command opens the model in a Metal 3D view. The
-command set is the full OCCT catalog: **251 commands** in
-`docs/catalog/` (machine-readable: `docs/catalog/catalog.json`, also
-bundled with the apps as their command source), each naming the real
-OCCT class and toolkit that implements it. Commands whose toolkit is
-not in a given build answer `NOT_IMPLEMENTED` — nothing is faked.
+— and the model shows in a Metal 3D view. The command set is the
+full OCCT catalog: **251 commands** in `docs/catalog/`
+(machine-readable: `docs/catalog/catalog.json`, also bundled with
+the apps as their command source), each naming the real OCCT class
+and toolkit that implements it. Commands whose toolkit is not in a
+given build answer `NOT_IMPLEMENTED` — nothing is faked.
 Per-command status: `COMMAND-COVERAGE.md`.
 
 Modern-CAD extras around the modelling — simulation (linear statics,
@@ -29,6 +35,25 @@ specified in `docs/EXTRAS.md`, with host-prototype numbers in
 `Extras/results/`. Launch-stability gates are in `docs/QA.md`.
 
 ## Honest status
+
+**v0.3.0 (2026-11-24): the UI-first redesign.** The iPad app no
+longer opens on a text console. LEFT panel: the part tree (user
+folders + per-command name directories), the parametric history,
+and the properties inspector (moved from the right). RIGHT
+sidebar: the command UI — the 15 implemented step commands with
+slider/field parameter forms and session-fed pickers; names are
+auto-assigned per directory when left blank (the panel shows the
+exact name a create will claim, using the same rule the engine
+uses). Name directories are real in the session layer: internal
+keys are qualified `dir:name`, uniqueness is per-directory,
+collisions auto-suffix instead of erroring, and bare-name
+resolution follows a documented order (qualified → context
+directory → unique bare match → an ambiguity error, never a
+guess). Projects save as `.cascadeproj` (steps + folders + viewer
+state; reopening replays the history); legacy `.cascade` scripts
+still run as scripts and can be imported as a one-step project.
+The Mac app remains on the stub engine (below). Full record:
+`FIXLOG.md` (v0.3.0).
 
 **v0.2.3 (2026-11-24): the viewer fan fix, and the first gate that
 runs the Swift viewer code.** The user's iPad test of v0.2.2 showed
