@@ -120,6 +120,65 @@ public final class SceneStore {
         return float4x4(translation: offset)
     }
 
+    // MARK: View commands (store-side state)
+
+    /// Apply a view command to the store's own state — the single
+    /// implementation behind CascadeRenderer.apply, the console's
+    /// `view ...` commands and (v0.3.2) the View panel. Returns
+    /// false for the commands the store does not own — screenshots
+    /// (GPU readback) and the renderer's face/edge label flags —
+    /// so the caller handles exactly those itself. Extracted from
+    /// CascadeRenderer.apply in v0.3.2 so the Swift harness, which
+    /// compiles this file, executes the panel's real state
+    /// transitions instead of a copy of them.
+    @discardableResult
+    public func apply(_ command: ViewerCommand) -> Bool {
+        switch command {
+        case .fit:
+            fitCamera()
+        case .standardView(let view):
+            camera.setStandardView(view)
+        case .displayMode(let mode):
+            displayMode = mode
+        case .setSection(let plane):
+            section = plane
+        case .setExplode(let factor):
+            explodeFactor = max(0, factor)
+        case .setMeasureEnabled(let on):
+            measureEnabled = on
+            if !on { clearMeasure() }
+        case .clearMeasure:
+            clearMeasure()
+        case .setCameraRotation(let azimuthDeg, let elevationDeg):
+            camera.setRotation(azimuthDegrees: azimuthDeg,
+                               elevationDegrees: elevationDeg)
+        case .rotateCameraBy(let dAzimuthDeg, let dElevationDeg):
+            camera.rotateBy(azimuthDegrees: dAzimuthDeg,
+                            elevationDegrees: dElevationDeg)
+        case .setGridVisible(let on):
+            gridVisible = on
+        case .setAxesVisible(let on):
+            axesVisible = on
+        case .setBackground(let top, let bottom):
+            backgroundTop = top
+            backgroundBottom = bottom
+        case .setProjection(let mode):
+            camera.projection = mode
+        case .setObjectVisible(let id, let on):
+            mutateProps(id: id) { $0.isVisible = on }
+        case .setObjectOpacity(let id, let value):
+            mutateProps(id: id) { $0.opacity = min(1, max(0, value)) }
+        case .setObjectColor(let id, let color):
+            mutateProps(id: id) { $0.color = color }
+        case .resetCamera:
+            camera = OrbitCamera()
+            fitCamera()
+        case .screenshot, .setFaceLabelsEnabled, .setEdgeLabelsEnabled:
+            return false
+        }
+        return true
+    }
+
     // MARK: Measure
 
     public var measureDistance: Float? {

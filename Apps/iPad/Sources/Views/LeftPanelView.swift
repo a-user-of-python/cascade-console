@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// The LEFT panel (v0.3.0): three segmented sections —
+/// The LEFT panel (v0.3.0): segmented sections —
 ///  * Parts: the part tree (folders + name directories),
 ///  * History: the parametric step list,
-///  * Properties: the inspector, moved here from the right side.
+///  * Properties: the inspector, moved here from the right side,
+///  * View: every view control (grid/axes/labels/display mode/
+///    camera rotation/measure) — added in v0.3.2; in v0.3.0 these
+///    existed only as console `view ...` commands.
 /// The command UI lives on the RIGHT now (CommandPanelView); the
 /// viewport stays centre.
 struct LeftPanelView: View {
@@ -15,6 +18,7 @@ struct LeftPanelView: View {
                 Text("Parts").tag(0)
                 Text("History").tag(1)
                 Text("Properties").tag(2)
+                Text("View").tag(3)
             }
             .pickerStyle(.segmented)
             .padding(8)
@@ -22,6 +26,7 @@ struct LeftPanelView: View {
             switch tab {
             case 0: PartTreeView()
             case 1: HistoryView()
+            case 3: ViewPanelView()
             default: PropertiesView()
             }
         }

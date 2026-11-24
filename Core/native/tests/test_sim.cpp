@@ -157,6 +157,15 @@ int main(int argc, char** argv) {
     int ec = 0;
     std::string out = r.run("sim material list");
     check(out.find("steel") != std::string::npos, "A1 material list");
+    // The app's Simulation form (v0.3.2, Shared/Model/SimForm.swift)
+    // hardcodes this library for its picker; pin every name here so
+    // a library change breaks THIS suite until the form follows.
+    for (const char* m : {"steel", "stainless-304", "aluminium-6061",
+                          "aluminium-7075", "titanium-6al4v", "brass",
+                          "copper", "pla", "abs", "petg"})
+      check(out.find(m) != std::string::npos,
+            std::string("A1b material list contains ") + m +
+                " (app sim form pin)");
     out = r.run("sim material show steel");
     check(out.find("200000") != std::string::npos, "A2 material show steel");
     r.run("sim run beam", &ec);

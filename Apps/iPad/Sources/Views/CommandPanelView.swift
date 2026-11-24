@@ -40,13 +40,18 @@ struct CommandPanelView: View {
                     if step.isScript {
                         scriptStepNote(step)
                     } else if let spec = CommandCatalog.spec(for: step.command) {
-                        form(for: spec)
+                        CommandFormView(spec: spec,
+                                        name: $draftName,
+                                        params: $draftParams)
                         editActions(step)
                     }
                 } else {
-                    commandList
+                    CommandListView(selectedID: draftCommandID,
+                                    onSelect: selectCommand)
                     Divider()
-                    form(for: addSpec)
+                    CommandFormView(spec: addSpec,
+                                    name: $draftName,
+                                    params: $draftParams)
                     addAction
                 }
             }
@@ -83,42 +88,10 @@ struct CommandPanelView: View {
 
     // MARK: - Add mode
 
-    private var commandList: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Commands")
-                .font(.headline)
-            ForEach(Array(CommandCatalog.grouped().enumerated()),
-                    id: \.offset) { _, group in
-                Text(group.group)
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                ForEach(group.specs, id: \.id) { spec in
-                    Button {
-                        draftCommandID = spec.id
-                        draftParams = spec.defaultParams
-                        draftName = ""
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(spec.title)
-                                    .foregroundStyle(.primary)
-                                Text(spec.summary)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.leading)
-                            }
-                            Spacer()
-                            if spec.id == draftCommandID {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
+    private func selectCommand(_ spec: CommandSpec) {
+        draftCommandID = spec.id
+        draftParams = spec.defaultParams
+        draftName = ""
     }
 
     private var addAction: some View {
@@ -209,10 +182,76 @@ struct CommandPanelView: View {
         }
     }
 
-    // MARK: - Parameter form
+}
 
-    @ViewBuilder
-    private func form(for spec: CommandSpec) -> some View {
+// MARK: - Command list (extracted v0.3.2)
+
+/// The grouped command list as its OWN view struct. In v0.3.0 it
+/// was a computed property of the panel, so every draft keystroke
+/// and slider tick re-evaluated and re-diffed all fifteen command
+/// rows along with the form. As a separate struct whose only
+/// inputs are the selected command id and the select action,
+/// SwiftUI can skip its body whenever those do not change — form
+/// edits stay inside the form's subtree.
+private struct CommandListView: View {
+    let selectedID: String
+    let onSelect: (CommandSpec) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Commands")
+                .font(.headline)
+            ForEach(CommandCatalog.grouped(), id: \.group) { group in
+                Text(group.group)
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                ForEach(group.specs, id: \.id) { spec in
+                    Button {
+                        onSelect(spec)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(spec.title)
+                                    .foregroundStyle(.primary)
+                                Text(spec.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer()
+                            if spec.id == selectedID {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Parameter form (extracted v0.3.2)
+
+/// One command's parameter form: name field + one row per
+/// parameter (slider paired with a numeric field — typing an
+/// exact value always wins — pickers for object/profile
+/// references fed from the session, text fields for point/edge
+/// lists). Extracted from the panel in v0.3.2 for the same reason
+/// as the list: the form's re-evaluation on a draft edit no longer
+/// drags the command list with it. The form edits DRAFT state
+/// only — nothing here can reach the engine; execution happens
+/// on Add/Apply in the panel, once.
+private struct CommandFormView: View {
+    @EnvironmentObject private var state: AppState
+
+    let spec: CommandSpec
+    @Binding var name: String
+    @Binding var params: [String: String]
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(spec.title)
                 .font(.headline)
@@ -220,7 +259,7 @@ struct CommandPanelView: View {
                 Text("Name")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
-                TextField("Blank = auto-assign", text: $draftName)
+                TextField("Blank = auto-assign", text: $name)
                     .noAutocapitalization()
                     .autocorrectionDisabled(true)
                     .textFieldStyle(.roundedBorder)
@@ -293,16 +332,16 @@ struct CommandPanelView: View {
 
     private func stringBinding(for param: ParamSpec) -> Binding<String> {
         Binding(
-            get: { draftParams[param.key] ?? param.defaultValue },
-            set: { draftParams[param.key] = $0 })
+            get: { params[param.key] ?? param.defaultValue },
+            set: { params[param.key] = $0 })
     }
 
     private func sliderBinding(for param: ParamSpec) -> Binding<Double> {
         Binding(
-            get: { Double(draftParams[param.key] ?? param.defaultValue)
+            get: { Double(params[param.key] ?? param.defaultValue)
                 ?? Double(param.defaultValue) ?? 0 },
             set: { newValue in
-                draftParams[param.key] = StepLineBuilder.formatNumber(
+                params[param.key] = StepLineBuilder.formatNumber(
                     String(format: "%.4g", newValue)) ?? param.defaultValue
             })
     }

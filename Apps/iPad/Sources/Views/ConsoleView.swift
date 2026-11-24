@@ -117,11 +117,17 @@ struct ConsoleView: View {
         state.run(command: command)
     }
 
+    /// One shared formatter (v0.3.2 perf pass: displayText used to
+    /// allocate a DateFormatter for every log row on every render).
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
     private func displayText(for entry: ConsoleLogEntry) -> String {
         if showTimestamps {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm:ss"
-            return "[\(formatter.string(from: entry.date))] \(entry.text)"
+            return "[\(Self.timestampFormatter.string(from: entry.date))] \(entry.text)"
         }
         return entry.text
     }

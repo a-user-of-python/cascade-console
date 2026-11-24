@@ -10,6 +10,10 @@ import SwiftUI
 struct PropertiesView: View {
     @EnvironmentObject private var state: AppState
 
+    @State private var simForm = SimFormState()
+    @State private var showingRename = false
+    @State private var renameText = ""
+
     var body: some View {
         if let item = selectedItem {
             List {
@@ -24,6 +28,10 @@ struct PropertiesView: View {
                     }) {
                         LabeledContent("Created by step",
                                        value: step.displayTitle)
+                    }
+                    Button("Rename…") {
+                        renameText = CascadeNames.display(of: item.shapeID)
+                        showingRename = true
                     }
                 }
                 if let stats = state.objectStats[item.shapeID] {
@@ -43,8 +51,38 @@ struct PropertiesView: View {
                         get: { item.isVisible },
                         set: { _ in state.toggleVisibility(item) }))
                 }
+                Section("Export") {
+                    HStack(spacing: 8) {
+                        Button {
+                            state.exportPart(qualifiedName: item.shapeID,
+                                             format: "step")
+                        } label: {
+                            Label("STEP", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                        Button {
+                            state.exportPart(qualifiedName: item.shapeID,
+                                             format: "stl")
+                        } label: {
+                            Label("STL", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                simSection(for: item)
             }
             .listStyle(.plain)
+            .alert("Rename Part", isPresented: $showingRename) {
+                TextField("Name", text: $renameText)
+                Button("Rename") {
+                    state.renameTreeEntry(qualifiedName: item.shapeID,
+                                          to: renameText)
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("The part keeps its directory (\(CascadeNames.directory(of: item.shapeID))/); the new name is claimed inside it.")
+            }
         } else if let profile = selectedProfile {
             List {
                 Section("Profile") {
@@ -80,6 +118,97 @@ struct PropertiesView: View {
               CascadeNames.directory(of: assigned) == "profile"
         else { return nil }
         return assigned
+    }
+
+    // MARK: - Simulation (v0.3.2)
+    //
+    // The form generates the existing `sim ...` commands verbatim
+    // (SimScriptBuilder) and runs them through the engine; results
+    // land in the console log from the real solver. Statics only —
+    // thermal stays console-only (its temperature/flux/convection
+    // boundary conditions are a second form family; see FIXLOG).
+
+    @ViewBuilder
+    private func simSection(for item: SceneObjectItem) -> some View {
+        let setup = SimScriptBuilder.setupLines(object: item.shapeID,
+                                                form: simForm)
+        Section("Simulation — Statics") {
+            Picker("Material", selection: $simForm.material) {
+                ForEach(SimFormState.materials, id: \.self) { name in
+                    Text(name).tag(name)
+                }
+            }
+            simFaceRow("Fixed face", text: $simForm.fixedFace)
+            simFaceRow("Load face", text: $simForm.loadFace)
+            Picker("Load type", selection: $simForm.loadKind) {
+                Text("Force").tag(SimFormState.LoadKind.force)
+                Text("Pressure").tag(SimFormState.LoadKind.pressure)
+            }
+            .pickerStyle(.segmented)
+            if simForm.loadKind == .force {
+                simNumberRow("Force X (N)", text: $simForm.forceX)
+                simNumberRow("Force Y (N)", text: $simForm.forceY)
+                simNumberRow("Force Z (N)", text: $simForm.forceZ)
+            } else {
+                simNumberRow("Pressure (MPa)", text: $simForm.pressureMPa)
+            }
+            simNumberRow("Mesh size (mm)", text: $simForm.meshSize)
+            Button {
+                if let setup { state.runSimLines(setup) }
+            } label: {
+                Label("Set Up Simulation", systemImage: "slider.horizontal.3")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(setup == nil || state.isRunning)
+            Button {
+                state.runSimLines(
+                    [SimScriptBuilder.runLine(object: item.shapeID)])
+            } label: {
+                Label("Run Simulation", systemImage: "play.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(state.isRunning)
+            Button("Clear Sim Setup") {
+                state.runSimLines(
+                    [SimScriptBuilder.clearLine(object: item.shapeID)])
+            }
+            .disabled(state.isRunning)
+            Text("Face numbers are the viewer's census indices — turn on face labels in the View panel to see them on the model. Results appear in the console. Thermal simulation stays in the console (sim thermal …).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func simFaceRow(_ label: String,
+                            text: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            TextField("0", text: text)
+                .noAutocapitalization()
+                .autocorrectionDisabled(true)
+                .numericKeyboard()
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 72)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func simNumberRow(_ label: String,
+                              text: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            TextField("0", text: text)
+                .noAutocapitalization()
+                .autocorrectionDisabled(true)
+                .numericKeyboard()
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 72)
+                .multilineTextAlignment(.trailing)
+        }
     }
 
     private func format(_ value: Double) -> String {

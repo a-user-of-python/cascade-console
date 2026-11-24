@@ -676,5 +676,135 @@ if CommandLine.arguments.count > 2 {
           "migration: a script step builds to no parametric line (runs via the script runner)")
 }
 
+// MARK: - View panel state (v0.3.2)
+//
+// The View panel's production path, executed end to end:
+// ViewStateChange -> the ViewerCommand the console parser
+// produces for the equivalent `view ...` line -> SceneStore.apply
+// (the implementation CascadeRenderer.apply delegates to) -> the
+// store state the renderer reads. The renderer's own label flags
+// are the one piece the store does not own; the split is pinned
+// by the `apply(...) == false` checks below.
+do {
+    // Mapping pins: each panel change IS the console's command.
+    check(ViewStateChange.setGrid(false).viewerCommand == .setGridVisible(false),
+          "view panel: grid toggle maps to view grid's command")
+    check(ViewStateChange.setAxes(true).viewerCommand == .setAxesVisible(true),
+          "view panel: axes toggle maps to view axes' command")
+    check(ViewStateChange.setFaceLabels(true).viewerCommand == .setFaceLabelsEnabled(true),
+          "view panel: face labels map to view labels faces' command")
+    check(ViewStateChange.setEdgeLabels(true).viewerCommand == .setEdgeLabelsEnabled(true),
+          "view panel: edge labels map to view labels edges' command")
+    check(ViewStateChange.setDisplayMode(.xray).viewerCommand == .displayMode(.xray),
+          "view panel: display mode maps to the view mode command")
+    check(ViewStateChange.setMeasure(true).viewerCommand == .setMeasureEnabled(true),
+          "view panel: measure toggle maps to view measure's command")
+    check(ViewStateChange.clearMeasure.viewerCommand == .clearMeasure,
+          "view panel: clear measure maps to view measure clear's command")
+    check(ViewStateChange.setRotation(azimuthDegrees: 30, elevationDegrees: 60).viewerCommand
+            == .setCameraRotation(azimuthDegrees: 30, elevationDegrees: 60),
+          "view panel: rotation sliders map to view rotate's command")
+    check(ViewStateChange.fit.viewerCommand == .fit
+            && ViewStateChange.resetCamera.viewerCommand == .resetCamera
+            && ViewStateChange.standardView(.iso).viewerCommand == .standardView(.iso),
+          "view panel: fit/reset/standard-view map to their console commands")
+
+    // Execution against a real store, through the production
+    // SceneStore.apply the renderer itself now delegates to.
+    let store = SceneStore()
+    check(store.gridVisible && store.axesVisible && !store.measureEnabled
+            && store.displayMode == .shaded,
+          "view panel: a fresh store matches the panel's default mirror")
+    store.apply(ViewStateChange.setGrid(false).viewerCommand)
+    check(!store.gridVisible, "view panel: grid toggle flips the flag the renderer reads")
+    store.apply(ViewStateChange.setAxes(false).viewerCommand)
+    check(!store.axesVisible, "view panel: axes toggle flips the flag the renderer reads")
+    for mode in DisplayMode.allCases {
+        store.apply(ViewStateChange.setDisplayMode(mode).viewerCommand)
+        check(store.displayMode == mode,
+              "view panel: display mode \(mode.rawValue) lands in the store")
+    }
+    store.apply(ViewStateChange.setRotation(azimuthDegrees: 30,
+                                            elevationDegrees: 60).viewerCommand)
+    check(abs(store.camera.azimuth - 30 * .pi / 180) < 1e-5
+            && abs(store.camera.elevation - 60 * .pi / 180) < 1e-5,
+          "view panel: rotation sliders land the camera at the requested angles")
+    store.apply(ViewStateChange.setRotation(azimuthDegrees: 0,
+                                            elevationDegrees: 120).viewerCommand)
+    check(abs(store.camera.elevation - 89.9 * .pi / 180) < 1e-5,
+          "view panel: elevation clamps at the same 89.9-degree pole limit as the console")
+    store.apply(ViewStateChange.setMeasure(true).viewerCommand)
+    store.addMeasurePoint(SIMD3<Float>(0, 0, 0))
+    store.addMeasurePoint(SIMD3<Float>(3, 4, 0))
+    check(store.measureEnabled && store.measureDistance == 5,
+          "view panel: measure on + two picks gives the store's distance")
+    store.apply(ViewStateChange.setMeasure(false).viewerCommand)
+    check(!store.measureEnabled && store.measurePoints.isEmpty,
+          "view panel: measure off clears the picked points (renderer semantics)")
+    check(store.apply(.setFaceLabelsEnabled(true)) == false
+            && store.apply(.setEdgeLabelsEnabled(true)) == false
+            && store.apply(.screenshot(path: "x", width: 1, height: 1)) == false,
+          "view panel: labels + screenshot stay renderer-owned (store.apply declines them)")
+    store.apply(ViewStateChange.resetCamera.viewerCommand)
+    check(abs(store.camera.azimuth - .pi / 4) < 1e-5,
+          "view panel: reset restores the default camera")
+
+    // The mirror reads back exactly what execution left behind.
+    store.apply(ViewStateChange.setGrid(true).viewerCommand)
+    store.apply(ViewStateChange.setDisplayMode(.wireframe).viewerCommand)
+    let snap = ViewState(store: store, faceLabels: true, edgeLabels: false)
+    check(snap.gridVisible && !snap.axesVisible && snap.faceLabelsEnabled
+            && !snap.edgeLabelsEnabled && snap.displayMode == .wireframe
+            && abs(snap.azimuthDegrees - 45) < 0.01,
+          "view panel: the ViewState mirror reads the store back faithfully")
+}
+
+// MARK: - Simulation form (v0.3.2)
+//
+// SimScriptBuilder generates the existing `sim ...` commands
+// verbatim; the lines below are the exact strings the form sends
+// for its default state and its pressure variant, and invalid
+// fields produce NO lines (a half-valid setup is never sent).
+// The material list is pinned against the engine in the sim
+// suite (test_sim asserts each name appears in `sim material
+// list` on both backends).
+do {
+    check(SimFormState.materials == ["steel", "stainless-304",
+            "aluminium-6061", "aluminium-7075", "titanium-6al4v",
+            "brass", "copper", "pla", "abs", "petg"],
+          "sim form: the material picker lists the engine library, in order")
+    var form = SimFormState()
+    check(SimScriptBuilder.setupLines(object: "box:part", form: form) == [
+        "sim material box:part steel",
+        "sim fix box:part @face 0",
+        "sim load box:part @face 1 force 0 0 -100",
+        "sim mesh size 2.5",
+        "sim static",
+    ], "sim form: the default statics setup generates the exact console commands")
+    form.loadKind = .pressure
+    form.pressureMPa = "0.5"
+    form.fixedFace = "2"
+    check(SimScriptBuilder.setupLines(object: "box:part", form: form)?[2]
+            == "sim load box:part @face 1 pressure 0.5",
+          "sim form: the pressure variant generates its load line")
+    check(SimScriptBuilder.setupLines(object: "box:part", form: form)?[1]
+            == "sim fix box:part @face 2",
+          "sim form: the fixed face follows the form")
+    form.fixedFace = "x"
+    check(SimScriptBuilder.setupLines(object: "box:part", form: form) == nil,
+          "sim form: a non-numeric face produces no setup lines")
+    form.fixedFace = "0"
+    form.meshSize = "0"
+    check(SimScriptBuilder.setupLines(object: "box:part", form: form) == nil,
+          "sim form: a zero mesh size produces no setup lines")
+    form.meshSize = "2.5"
+    form.material = "unobtainium"
+    check(SimScriptBuilder.setupLines(object: "box:part", form: form) == nil,
+          "sim form: a material outside the library produces no setup lines")
+    check(SimScriptBuilder.runLine(object: "box:part") == "sim run box:part"
+            && SimScriptBuilder.clearLine(object: "box:part") == "sim clear box:part",
+          "sim form: run/clear lines are the console commands verbatim")
+}
+
 print("RESULT: \(passCount) pass, \(failCount) fail (swift viewer harness)")
 exit(failCount == 0 ? 0 : 1)

@@ -23,6 +23,15 @@ struct PartTreeView: View {
     @State private var newFolderName = ""
     @State private var renamingFolder: PartFolder?
     @State private var renameText = ""
+    @State private var renamingEntry: String?
+
+    /// The selected step's assigned name, resolved ONCE per body
+    /// evaluation (v0.3.2 perf pass: entryRow used to scan the
+    /// whole step list again for every row).
+    private var selectedAssignedName: String? {
+        guard let id = state.selectedStepID else { return nil }
+        return state.project.steps.first { $0.id == id }?.assignedName
+    }
 
     /// All qualified names in the tree: objects + profiles.
     private var allNames: [String] {
@@ -119,6 +128,19 @@ struct PartTreeView: View {
             }
             Button("Cancel", role: .cancel) { renamingFolder = nil }
         }
+        .alert("Rename Part", isPresented: Binding(
+            get: { renamingEntry != nil },
+            set: { if !$0 { renamingEntry = nil } })) {
+            TextField("Name", text: $renameText)
+            Button("Rename") {
+                if let entry = renamingEntry {
+                    state.renameTreeEntry(qualifiedName: entry,
+                                          to: renameText)
+                }
+                renamingEntry = nil
+            }
+            Button("Cancel", role: .cancel) { renamingEntry = nil }
+        }
     }
 
     // MARK: - Folder header
@@ -154,10 +176,10 @@ struct PartTreeView: View {
     private func entryRow(_ qualified: String) -> some View {
         let isProfile = CascadeNames.directory(of: qualified) == "profile"
         let item = state.objects.first { $0.shapeID == qualified }
-        let stepSelected = state.selectedStepID != nil &&
-            state.project.steps.first(where: {
-                $0.id == state.selectedStepID
-            })?.assignedName == qualified
+        let stepOwned = state.project.steps.contains {
+            $0.assignedName == qualified
+        }
+        let stepSelected = selectedAssignedName == qualified
         let isSelected = stepSelected ||
             (item != nil && state.selectedObjectID == item?.id)
         return HStack(spacing: 8) {
@@ -177,6 +199,27 @@ struct PartTreeView: View {
                 .accessibilityLabel(item.isVisible ? "Hide" : "Show")
             }
             Menu {
+                // Rename is offered for objects and for step-owned
+                // profiles; a console-created profile cannot be
+                // renamed (the engine's rename covers objects) —
+                // see AppState.renameTreeEntry.
+                if !isProfile || stepOwned {
+                    Button("Rename…") {
+                        renameText = CascadeNames.display(of: qualified)
+                        renamingEntry = qualified
+                    }
+                }
+                if !isProfile {
+                    Button("Export STEP…") {
+                        state.exportPart(qualifiedName: qualified,
+                                         format: "step")
+                    }
+                    Button("Export STL…") {
+                        state.exportPart(qualifiedName: qualified,
+                                         format: "stl")
+                    }
+                    Divider()
+                }
                 Button("Move to Top Level") {
                     state.project.moveObject(qualified, toFolder: nil)
                 }

@@ -190,13 +190,24 @@ public enum CommandCatalog {
     public static let groupOrder = ["Primitives", "Profiles", "Booleans", "Modify", "Transform"]
 
     public static func spec(for id: String) -> CommandSpec? {
-        all.first { $0.id == id }
+        byID[id]
     }
 
-    public static func grouped() -> [(group: String, specs: [CommandSpec])] {
+    /// Cached lookups (v0.3.2 perf pass): the command panel calls
+    /// spec(for:)/grouped() from view bodies, and the uncached
+    /// versions re-scanned/re-grouped the whole catalog on EVERY
+    /// evaluation — including every slider tick. The catalog is a
+    /// compile-time constant, so both are computed exactly once.
+    private static let byID: [String: CommandSpec] =
+        Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+
+    private static let groupedCache: [(group: String, specs: [CommandSpec])] =
         groupOrder.compactMap { g in
             let specs = all.filter { $0.group == g }
             return specs.isEmpty ? nil : (group: g, specs: specs)
         }
+
+    public static func grouped() -> [(group: String, specs: [CommandSpec])] {
+        groupedCache
     }
 }

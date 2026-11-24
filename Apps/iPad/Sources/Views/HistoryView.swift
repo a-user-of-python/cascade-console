@@ -7,9 +7,12 @@ import SwiftUI
 /// untouched and the error is shown here, naming the failing step.
 struct HistoryView: View {
     @EnvironmentObject private var state: AppState
+    @State private var showingClearConfirm = false
 
     var body: some View {
         VStack(spacing: 0) {
+            sessionControls
+            Divider()
             if let error = state.lastReplayError {
                 Text(error)
                     .font(.callout)
@@ -42,6 +45,52 @@ struct HistoryView: View {
                 .listStyle(.plain)
             }
         }
+        .confirmationDialog(
+            "Clear the whole scene?",
+            isPresented: $showingClearConfirm,
+            titleVisibility: .visible) {
+            Button("Clear Scene", role: .destructive) {
+                state.newProject()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This removes every part and every history step and starts a fresh session. Save the project first if you need it.")
+        }
+    }
+
+    /// Session controls (v0.3.2 — these existed only as console
+    /// commands in v0.3.0). Undo/Redo are the ENGINE's session
+    /// undo/redo, the same commands the console runs: they act on
+    /// the live session, so undoing a step-created part removes it
+    /// from the session while its step stays in the list (a later
+    /// replay rebuilds it) — the step list remains the model's
+    /// source of truth, exactly as with console commands. Clear is
+    /// the coherent full reset: fresh session, empty history.
+    private var sessionControls: some View {
+        HStack(spacing: 8) {
+            Button {
+                state.run(command: "undo")
+            } label: {
+                Label("Undo", systemImage: "arrow.uturn.backward")
+            }
+            .disabled(state.isRunning)
+            Button {
+                state.run(command: "redo")
+            } label: {
+                Label("Redo", systemImage: "arrow.uturn.forward")
+            }
+            .disabled(state.isRunning)
+            Spacer()
+            Button(role: .destructive) {
+                showingClearConfirm = true
+            } label: {
+                Label("Clear", systemImage: "trash")
+            }
+            .disabled(state.isRunning)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(8)
     }
 
     private func row(index: Int, step: ModelStep) -> some View {

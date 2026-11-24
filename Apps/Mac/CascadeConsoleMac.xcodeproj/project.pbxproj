@@ -56,6 +56,9 @@
 		B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E37E3031BB95344C6955ECEB /* Renderer.swift */; };
 		5CE1A11E55AA202411240002 /* SceneHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE1A11E55AA202411240001 /* SceneHelpers.swift */; };
 		CC30A11E55AA202411300002 /* CascadeNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300001 /* CascadeNames.swift */; };
+		CC3200A11E55AA2024113006 /* ViewPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3200A11E55AA2024113005 /* ViewPanelView.swift */; };
+		CC3200A11E55AA2024113004 /* SimForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3200A11E55AA2024113003 /* SimForm.swift */; };
+		CC3200A11E55AA2024113002 /* ViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3200A11E55AA2024113001 /* ViewState.swift */; };
 		CC30A11E55AA202411300004 /* CommandSpecs.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300003 /* CommandSpecs.swift */; };
 		CC30A11E55AA202411300006 /* ModelStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300005 /* ModelStep.swift */; };
 		CC30A11E55AA202411300008 /* ProjectFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC30A11E55AA202411300007 /* ProjectFile.swift */; };
@@ -101,6 +104,9 @@
 		E37E3031BB95344C6955ECEB /* Renderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Renderer.swift"; sourceTree = "<group>"; };
 		5CE1A11E55AA202411240001 /* SceneHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SceneHelpers.swift"; sourceTree = "<group>"; };
 		CC30A11E55AA202411300001 /* CascadeNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CascadeNames.swift"; sourceTree = "<group>"; };
+		CC3200A11E55AA2024113005 /* ViewPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewPanelView.swift"; sourceTree = "<group>"; };
+		CC3200A11E55AA2024113003 /* SimForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SimForm.swift"; sourceTree = "<group>"; };
+		CC3200A11E55AA2024113001 /* ViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewState.swift"; sourceTree = "<group>"; };
 		CC30A11E55AA202411300003 /* CommandSpecs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandSpecs.swift"; sourceTree = "<group>"; };
 		CC30A11E55AA202411300005 /* ModelStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModelStep.swift"; sourceTree = "<group>"; };
 		CC30A11E55AA202411300007 /* ProjectFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectFile.swift"; sourceTree = "<group>"; };
@@ -158,6 +164,7 @@
 		BC9C0F4B1088144347CCAA29 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				CC3200A11E55AA2024113005 /* ViewPanelView.swift */,
 				A0B6AA9A1520F335A6168D54 /* ConsoleView.swift */,
 				D1405B8BDBEA8BADDC2CC792 /* ContentView.swift */,
 				D6EE8E0CA29413B891C44EF6 /* FileBrowserView.swift */,
@@ -222,6 +229,7 @@
 		CC30A11E55AA202411300000 /* Model */ = {
 			isa = PBXGroup;
 			children = (
+				CC3200A11E55AA2024113003 /* SimForm.swift */,
 				CC30A11E55AA202411300001 /* CascadeNames.swift */,
 				CC30A11E55AA202411300003 /* CommandSpecs.swift */,
 				CC30A11E55AA202411300005 /* ModelStep.swift */,
@@ -249,6 +257,7 @@
 		D19212C5AB1839E17ACDB89B /* Swift */ = {
 			isa = PBXGroup;
 			children = (
+				CC3200A11E55AA2024113001 /* ViewState.swift */,
 				DE1F27660E7B12A208ABB425 /* Camera.swift */,
 				6113FE979560419DE4DA38C1 /* CascadeMetalView.swift */,
 				FB2832F9925C34934165BA92 /* MeshBuffer.swift */,
@@ -420,6 +429,9 @@
 				B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */,
 				5CE1A11E55AA202411240002 /* SceneHelpers.swift in Sources */,
 				CC30A11E55AA202411300002 /* CascadeNames.swift in Sources */,
+				CC3200A11E55AA2024113006 /* ViewPanelView.swift in Sources */,
+				CC3200A11E55AA2024113004 /* SimForm.swift in Sources */,
+				CC3200A11E55AA2024113002 /* ViewState.swift in Sources */,
 				CC30A11E55AA202411300004 /* CommandSpecs.swift in Sources */,
 				CC30A11E55AA202411300006 /* ModelStep.swift in Sources */,
 				CC30A11E55AA202411300008 /* ProjectFile.swift in Sources */,
@@ -489,14 +501,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
 				PRODUCT_NAME = CascadeConsole;
 				SDKROOT = macosx;
@@ -508,14 +520,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
 				PRODUCT_NAME = CascadeConsole;
 				SDKROOT = macosx;

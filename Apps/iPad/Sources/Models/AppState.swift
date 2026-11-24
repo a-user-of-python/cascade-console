@@ -33,6 +33,15 @@ final class AppState: ObservableObject {
     /// Set when a replay fails; the History panel shows it and the
     /// failing step stays selected. Cleared by the next success.
     @Published var lastReplayError: String?
+    /// Mirror of the viewer's live state for the View panel
+    /// (v0.3.2). NOT a second source of truth: it is re-read from
+    /// the renderer (syncViewState) after every change, wherever
+    /// the change came from — panel, console `view` line, project
+    /// snapshot, or a camera drag in the viewport.
+    @Published var viewState = ViewState()
+    /// Latest two-point measure distance from the viewer (nil
+    /// until two points are picked with measure on).
+    @Published var measureDistance: Float?
     /// Number of objects actually loaded in the 3D viewer, shown in
     /// the viewport header. Published and updated AFTER the meshes
     /// are loaded in refreshScene: v0.2.2's header read the
@@ -67,6 +76,7 @@ final class AppState: ObservableObject {
         self.fileStore = fileStore
 
         renderer?.delegate = self
+        syncViewState()
 
         appendLog(.info, "Cascade Console ready. Build from the command panel on the right, or open the console tab and type 'help'.")
     }
@@ -323,7 +333,14 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let meshes = try EngineMeshAdapter.meshObjects(from: viewObjects)
+            // The CCM1 -> MeshObject conversion is pure CPU work
+            // over every vertex of every object; it used to run
+            // inline here, on the main actor, after every command
+            // (v0.3.2 perf pass — see FIXLOG). It now runs detached;
+            // only the renderer calls below stay on the main actor.
+            let meshes = try await Task.detached(priority: .userInitiated) {
+                try EngineMeshAdapter.meshObjects(from: viewObjects)
+            }.value
             let liveIDs = Set(meshes.map { $0.id })
             for stale in renderer.objectIDs where !liveIDs.contains(stale) {
                 renderer.removeObject(id: stale)
@@ -521,6 +538,106 @@ final class AppState: ObservableObject {
         appendLog(.info, "New project.")
     }
 
+    // MARK: - View panel (v0.3.2)
+    //
+    // The View panel drives the same viewer state the console's
+    // `view ...` commands drive. A panel action becomes the exact
+    // ViewerCommand the text parser produces for the equivalent
+    // line (ViewStateChange.viewerCommand) and is applied through
+    // CascadeRenderer.apply — one path, no parallel state. The
+    // published `viewState` is a read-back mirror, refreshed by
+    // syncViewState() after every change (the renderer's
+    // viewerDidChangeCamera delegate fires at the end of every
+    // apply AND on viewport drags, so the mirror tracks those too).
+
+    /// Re-read the view-state mirror from the renderer. Cheap (a
+    /// few flag reads) and change-gated, so a camera drag does not
+    /// republish identical state frame after frame.
+    func syncViewState() {
+        guard let renderer else { return }
+        let fresh = ViewState(store: renderer.store,
+                              faceLabels: renderer.faceLabelsEnabled,
+                              edgeLabels: renderer.edgeLabelsEnabled)
+        // Angles compare with a small tolerance: a panel slider
+        // sets degrees -> the store keeps radians -> the read-back
+        // differs in the last bits, and republishing that would
+        // fight the slider mid-drag. Flags compare exactly.
+        let sameAngles =
+            abs(fresh.azimuthDegrees - viewState.azimuthDegrees) < 0.01
+            && abs(fresh.elevationDegrees - viewState.elevationDegrees) < 0.01
+        let sameRest =
+            fresh.gridVisible == viewState.gridVisible
+            && fresh.axesVisible == viewState.axesVisible
+            && fresh.faceLabelsEnabled == viewState.faceLabelsEnabled
+            && fresh.edgeLabelsEnabled == viewState.edgeLabelsEnabled
+            && fresh.displayMode == viewState.displayMode
+            && fresh.measureEnabled == viewState.measureEnabled
+            && fresh.measurePointCount == viewState.measurePointCount
+        if !(sameAngles && sameRest) { viewState = fresh }
+        let distance = renderer.store.measureDistance
+        if distance != measureDistance { measureDistance = distance }
+    }
+
+    /// Apply one View-panel action and re-read the mirror.
+    func applyViewChange(_ change: ViewStateChange) {
+        guard let renderer else { return }
+        renderer.apply(change.viewerCommand)
+        syncViewState()
+    }
+
+    // MARK: - Part operations from the UI (v0.3.2)
+
+    /// Rename a tree entry. The v0.3.0 directory rules are the
+    /// engine's: the object keeps its creating directory and the
+    /// new display name is claimed inside it (auto-suffix on a
+    /// collision). A step-owned entry is renamed by editing its
+    /// step's name and replaying; a console-created object is
+    /// renamed in the session directly. Console-created PROFILES
+    /// cannot be renamed — the engine's rename covers objects —
+    /// and the tree does not offer it for them.
+    func renameTreeEntry(qualifiedName: String, to newDisplay: String) {
+        let trimmed = newDisplay.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              trimmed != CascadeNames.display(of: qualifiedName)
+        else { return }
+        if let step = project.steps.first(where: {
+            $0.assignedName == qualifiedName
+        }) {
+            applyStepEdit(id: step.id, params: step.params, name: trimmed)
+        } else {
+            run(command: "rename \(qualifiedName) as \(trimmed)")
+        }
+    }
+
+    /// Export a part to Documents (STEP or STL) — the UI button
+    /// over the existing console export path: run() routes a bare
+    /// file name into Documents, and file sharing is on.
+    func exportPart(qualifiedName: String, format: String) {
+        let display = CascadeNames.display(of: qualifiedName)
+        run(command: "export-\(format) \(qualifiedName) \(display).\(format)")
+    }
+
+    /// Run the Simulation form's generated lines (v0.3.2) in
+    /// order, in ONE task: the sim commands are order-dependent
+    /// (material and boundary conditions must exist before
+    /// `sim run` solves), so they cannot take run(command:)'s
+    /// one-task-per-line path. Each line is logged like a typed
+    /// command and its result applied the same way; the first
+    /// error stops the sequence, exactly as a user typing the
+    /// lines would stop and read.
+    func runSimLines(_ lines: [String]) {
+        isRunning = true
+        Task { @MainActor in
+            defer { isRunning = false }
+            for line in lines {
+                appendLog(.input, "> \(line)")
+                let result = await engine.execute(command: line)
+                apply(result)
+                if result.isError { return }
+            }
+        }
+    }
+
     // MARK: - Project files (v0.3.0)
 
     func saveProject() {
@@ -672,7 +789,13 @@ final class AppState: ObservableObject {
 // MARK: - ViewerBridgeDelegate
 
 extension AppState: ViewerBridgeDelegate {
-    func viewerDidChangeCamera(_ viewer: ViewerBridge) {}
+    func viewerDidChangeCamera(_ viewer: ViewerBridge) {
+        // Fires at the end of every renderer.apply (console `view`
+        // lines, panel actions, snapshot restores) and on viewport
+        // drags — the one hook that keeps the View panel's mirror
+        // honest wherever the change came from (v0.3.2).
+        syncViewState()
+    }
 
     func viewer(_ viewer: ViewerBridge, didPick result: PickResult?) {
         guard let result else { return }
@@ -682,7 +805,9 @@ extension AppState: ViewerBridgeDelegate {
         }
     }
 
-    func viewer(_ viewer: ViewerBridge, measureDistanceChanged distance: Float?) {}
+    func viewer(_ viewer: ViewerBridge, measureDistanceChanged distance: Float?) {
+        measureDistance = distance
+    }
     func viewer(_ viewer: ViewerBridge, didWriteScreenshotTo path: String) {}
     func viewer(_ viewer: ViewerBridge, didFailWith message: String) {
         appendLog(.error, "Viewer: \(message)")

@@ -216,12 +216,14 @@ jobs:
             Shared/Viewer/Swift/ViewerBridge.swift \
             Shared/Viewer/Swift/Camera.swift \
             Shared/Viewer/Swift/SceneStore.swift \
+            Shared/Viewer/Swift/ViewState.swift \
             Shared/Engine/EngineProtocol.swift \
             Shared/Models/SharedModels.swift \
             Shared/Model/CascadeNames.swift \
             Shared/Model/CommandSpecs.swift \
             Shared/Model/ModelStep.swift \
             Shared/Model/ProjectFile.swift \
+            Shared/Model/SimForm.swift \
             Shared/Viewer/Verification/swift-harness/main.swift \
             -o build/swift_viewer_harness
           ./build/swift_viewer_harness build/fixture.ccfx build/fixture_ns.txt

@@ -226,53 +226,23 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
     // MARK: ViewerBridge - commands
 
     public func apply(_ command: ViewerCommand) {
+        // The store owns every state mutation (SceneStore.apply —
+        // the implementation the console, the View panel and the
+        // Swift harness all execute). The renderer itself handles
+        // only what the store cannot: screenshots, its own label
+        // flags, and the measure-cleared delegate notification.
         switch command {
-        case .fit:
-            store.fitCamera()
-        case .standardView(let view):
-            store.camera.setStandardView(view)
-        case .displayMode(let mode):
-            store.displayMode = mode
-        case .setSection(let plane):
-            store.section = plane
-        case .setExplode(let factor):
-            store.explodeFactor = max(0, factor)
         case .screenshot(let path, let width, let height):
             writeScreenshot(path: path, width: width, height: height)
-        case .setMeasureEnabled(let on):
-            store.measureEnabled = on
-            if !on { store.clearMeasure() }
-        case .clearMeasure:
-            store.clearMeasure()
-            delegate?.viewer(self, measureDistanceChanged: nil)
         case .setFaceLabelsEnabled(let on):
             faceLabelsEnabled = on
         case .setEdgeLabelsEnabled(let on):
             edgeLabelsEnabled = on
-        case .setCameraRotation(let azimuthDeg, let elevationDeg):
-            store.camera.setRotation(azimuthDegrees: azimuthDeg,
-                                     elevationDegrees: elevationDeg)
-        case .rotateCameraBy(let dAzimuthDeg, let dElevationDeg):
-            store.camera.rotateBy(azimuthDegrees: dAzimuthDeg,
-                                  elevationDegrees: dElevationDeg)
-        case .setGridVisible(let on):
-            store.gridVisible = on
-        case .setAxesVisible(let on):
-            store.axesVisible = on
-        case .setBackground(let top, let bottom):
-            store.backgroundTop = top
-            store.backgroundBottom = bottom
-        case .setProjection(let mode):
-            store.camera.projection = mode
-        case .setObjectVisible(let id, let on):
-            store.mutateProps(id: id) { $0.isVisible = on }
-        case .setObjectOpacity(let id, let value):
-            store.mutateProps(id: id) { $0.opacity = min(1, max(0, value)) }
-        case .setObjectColor(let id, let color):
-            store.mutateProps(id: id) { $0.color = color }
-        case .resetCamera:
-            store.camera = OrbitCamera()
-            store.fitCamera()
+        case .clearMeasure:
+            store.apply(command)
+            delegate?.viewer(self, measureDistanceChanged: nil)
+        default:
+            store.apply(command)
         }
         delegate?.viewerDidChangeCamera(self)
     }
