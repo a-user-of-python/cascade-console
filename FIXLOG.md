@@ -589,3 +589,74 @@ present, catalog.json + default.metallib + both OCCT licence texts
 bundled; 9,156,944 bytes, md5 6e2ad5969d73d94ec76d91eca4edead3.
 
 Version: MARKETING_VERSION 0.2.1, CURRENT_PROJECT_VERSION 3.
+
+## v0.2.2 — device-feedback fixes (2026-11-24)
+
+The user's iPad test of v0.2.1 reported two defects:
+
+1. **Created geometry renders inverted / inside-out** ("The
+   geometry is inverted so I can't see it"). Objects now reach the
+   viewer (the v0.2.1 use-after-free fix works) but appear
+   inside-out. ROOT CAUSE (Swift viewer layer,
+   `Shared/Viewer/Swift/Camera.swift`): the perspective matrix was
+   LEFT-handed — the glm `perspectiveLH_ZO` form, clip w = +z_view
+   and NDC z decreasing with distance — while the view matrix
+   (right-handed lookAt), the model data (OCCT, right-handed) and
+   Metal's defaults are all right-handed. Proven numerically by
+   replicating the shipped formulas: every point in front of the
+   camera had clip w < 0 (36/36 box corners), which inverts the
+   rasterizer's front/back facing test — with Metal's default
+   back-face culling the near faces are culled and the inside of
+   the far side shows — and NDC z DEcreased with distance
+   (1.003 -> 1.0004 over 10..80 mm), so under the renderer's
+   less-than depth test far surfaces beat near ones. The
+   orthographic matrix had the same inverted depth slope.
+   The mesh data was investigated first and is NOT the cause:
+   both engine tessellators (façade `mc_tessellate` and
+   `ccgeom_occt`) flip triangle winding for TopAbs_REVERSED faces,
+   and a probe through `cc_view_data` on BOTH backends (OCCT 8.0.1;
+   mc over the CI-patched façade) shows signed mesh volume ==
+   analytic volume (box +1000, L-prism +6000, cylinder ~0.99x),
+   all 6 box face normals outward, and an asymmetric L prism NOT
+   mirrored (notch corner at (10,10), none at (20,10)). No
+   mirrored transform exists in the view-data path (model matrix
+   is identity/translation only) and the renderer sets no cull /
+   winding overrides. FIX at the wrong layer only: Camera.swift's
+   perspective is now the right-handed form (clip w = -z_view > 0
+   in front; NDC z 0 at near -> 1 at far, increasing with
+   distance) and the orthographic z slope is flipped to match.
+   Picking and face labels consume the same view-projection (and
+   its inverse), so they stay consistent automatically. Rendering
+   is correct by default on creation; no command or setting.
+   REGRESSION GUARDS: (a) new orientation invariants in
+   `Core/native/tests/test_engine.cpp` (OCCT backend) and
+   `Core/native/tests/test_view_data_mc.cpp` (mc backend): signed
+   mesh volume > 0 and matching analytic for box / cylinder /
+   L-prism, box face-range normals outward (dot > 0, all 6), L
+   notch not mirrored; (b) new
+   `Shared/Viewer/Verification/verify_projection.py`, run by the
+   Host tests workflow, which mirrors Camera.swift's formulas and
+   asserts clip w > 0 in front, NDC z in [0,1] and increasing with
+   distance, correct front/back classification of a box's faces,
+   and the orthographic depth slope. (Swift itself still cannot
+   be compiled on the host; the guard pins the formulas, and the
+   user's device verdict remains the final judge.)
+2. **File sharing is off**: the app's Documents folder (where
+   v0.2.1 routes exports) is not visible via the Files app /
+   Finder file sharing. VERIFIED FROM THE SHIPPED ARTIFACTS, not
+   the project file: the delivered v0.1, v0.2 and v0.2.1 IPAs'
+   Info.plists all contain LSSupportsOpeningDocumentsInPlace =
+   true but NO UIFileSharingEnabled key at all — although
+   `INFOPLIST_KEY_UIFileSharingEnabled = YES` has been in the
+   target's build settings since v0.1 (the build-prep note
+   claiming "file sharing enabled" was wrong about the shipped
+   binary). The generated-Info.plist route silently drops this
+   key. FIX: the app now carries an explicit
+   `Apps/iPad/Info.plist` with UIFileSharingEnabled = true and
+   LSSupportsOpeningDocumentsInPlace = true, wired via
+   INFOPLIST_FILE (the INFOPLIST_KEY_* settings remain as well),
+   AND the build-ipa bundle gate now asserts both keys are true
+   in the built .app's Info.plist (PlistBuddy), so this cannot
+   silently regress again.
+
+Version: MARKETING_VERSION 0.2.2, CURRENT_PROJECT_VERSION 4.

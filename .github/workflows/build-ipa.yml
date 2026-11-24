@@ -149,6 +149,19 @@ jobs:
           test -f "$APP_PATH/default.metallib"
           test -f "$APP_PATH/OCCT-LGPL-2.1.txt"
           test -f "$APP_PATH/OCCT-LGPL-EXCEPTION.txt"
+          # File sharing gate (v0.2.2): UIFileSharingEnabled was set
+          # via INFOPLIST_KEY_UIFileSharingEnabled in the project from
+          # v0.1 on, yet was silently ABSENT from every shipped
+          # Info.plist (v0.1-v0.2.1, verified from the delivered IPAs)
+          # while LSSupportsOpeningDocumentsInPlace survived. The app
+          # now carries an explicit Info.plist; assert BOTH keys are
+          # actually true in the built bundle so this cannot regress.
+          echo "File-sharing keys in the shipped Info.plist:"
+          /usr/libexec/PlistBuddy -c "Print :UIFileSharingEnabled" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :LSSupportsOpeningDocumentsInPlace" "$APP_PATH/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c "Print :UIFileSharingEnabled" "$APP_PATH/Info.plist")" = "true"
+          test "$(/usr/libexec/PlistBuddy -c "Print :LSSupportsOpeningDocumentsInPlace" "$APP_PATH/Info.plist")" = "true"
+          echo "GATE PASS: file sharing is ON in the shipped bundle"
           BIN="$APP_PATH/CascadeConsole"
           echo "Native-engine symbols in the shipped executable:"
           xcrun nm "$BIN" | grep -E "_cc_execute$|_cc_session_create$|_mc_clone_shape$|_mc_export_stl$"

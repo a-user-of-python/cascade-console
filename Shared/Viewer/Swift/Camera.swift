@@ -136,25 +136,46 @@ public extension float4x4 {
     }
 
     init(perspectiveFovDegrees fov: Float, aspect: Float, near: Float, far: Float) {
+        // Right-handed, matching the view matrix above and the OCCT
+        // model space: the camera looks down -Z in view space, so
+        // clip w must be -z_view (positive for everything in front),
+        // and NDC z must run 0 at the near plane to 1 at the far
+        // plane, INCREASING with distance, for the renderer's
+        // less-than depth test to keep near surfaces on top.
+        //
+        // v0.2.1 shipped a LEFT-handed form here (w = +z_view, NDC z
+        // decreasing with distance): every visible point had negative
+        // clip w, which inverts the rasterizer's front/back facing
+        // test, and the inverted depth let far surfaces win over near
+        // ones — created geometry rendered inside-out ("inverted").
+        // The mesh data was never wrong (signed-volume proven on both
+        // engine backends); this matrix was the only inverted layer.
+        // Guard: Shared/Viewer/Verification/verify_projection.py.
         let yScale = 1 / tan(fov * .pi / 360)
         let xScale = yScale / aspect
-        let zScale = far / (far - near)
+        let zScale = far / (near - far)          // negative
         self.init(columns: (
             SIMD4<Float>(xScale, 0, 0, 0),
             SIMD4<Float>(0, yScale, 0, 0),
-            SIMD4<Float>(0, 0, zScale, 1),
-            SIMD4<Float>(0, 0, -near * zScale, 0)
+            SIMD4<Float>(0, 0, zScale, -1),
+            SIMD4<Float>(0, 0, near * zScale, 0)
         ))
     }
 
     init(orthographicLeft l: Float, right r: Float, bottom b: Float,
          top t: Float, near n: Float, far f: Float) {
-        // Metal NDC z is [0, 1]; map [near, far] onto it.
+        // Metal NDC z is [0, 1]. View space is right-handed (camera
+        // looks down -Z), so depth must DECREASE as view z increases:
+        // the far end of the slab (view z = n, the negative bound the
+        // caller passes) maps to 1 and the near end to 0, keeping the
+        // less-than depth test correct. The pre-v0.2.2 form had the
+        // opposite slope and inverted depth the same way the old
+        // perspective matrix did.
         self.init(columns: (
             SIMD4<Float>(2 / (r - l), 0, 0, 0),
             SIMD4<Float>(0, 2 / (t - b), 0, 0),
-            SIMD4<Float>(0, 0, 1 / (f - n), 0),
-            SIMD4<Float>(-(r + l) / (r - l), -(t + b) / (t - b), -n / (f - n), 1)
+            SIMD4<Float>(0, 0, -1 / (f - n), 0),
+            SIMD4<Float>(-(r + l) / (r - l), -(t + b) / (t - b), f / (f - n), 1)
         ))
     }
 

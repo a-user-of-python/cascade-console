@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- File sharing (v0.2.2): the app's Documents folder — where
+	     exports land — must be visible in the Files app and in
+	     Finder/iTunes file sharing. These keys live in this explicit
+	     Info.plist because the INFOPLIST_KEY_UIFileSharingEnabled
+	     build setting alone was silently dropped from the generated
+	     plist in every shipped build v0.1–v0.2.1 (verified from the
+	     delivered IPAs: LSSupportsOpeningDocumentsInPlace, set the
+	     same way, survived; UIFileSharingEnabled did not). The CI
+	     bundle gate now asserts both keys on the built .app. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>

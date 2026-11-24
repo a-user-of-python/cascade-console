@@ -33,6 +33,23 @@ static void check(bool ok, const std::string& what) {
 }
 static bool near(double a, double b, double tol) { return std::fabs(a - b) <= tol; }
 
+// Signed volume of a closed triangle mesh: positive iff the winding
+// is outward (right-handed convention). A negative value means the
+// tessellation is inside-out — the v0.2.2 regression invariant.
+static double signedVolume(const CCViewData& d) {
+  double v = 0;
+  for (int t = 0; t < d.triangleCount; ++t) {
+    const float* a = &d.vertices[d.indices[t * 3] * 3];
+    const float* b = &d.vertices[d.indices[t * 3 + 1] * 3];
+    const float* c = &d.vertices[d.indices[t * 3 + 2] * 3];
+    double cx = b[1] * c[2] - b[2] * c[1];
+    double cy = b[2] * c[0] - b[0] * c[2];
+    double cz = b[0] * c[1] - b[1] * c[0];
+    v += (a[0] * cx + a[1] * cy + a[2] * cz) / 6.0;
+  }
+  return v;
+}
+
 int main(int argc, char** argv) {
   (void)argc; (void)argv;
   std::printf("Cascade Console view-data smoke (mc backend / CascadeKit)\n");
@@ -128,6 +145,91 @@ int main(int argc, char** argv) {
   rc = cc_view_data(s, "nope", 0.5, &objs, &n);
   check(rc == 1005, "cc_view_data('nope') -> E1005");
   cc_free_view_data(objs, n);
+
+  // ---- ORIENTATION invariants (v0.2.2) -------------------------------
+  // The device verdict on v0.2.1 was "geometry is inverted": the true
+  // cause was the Swift camera's left-handed perspective matrix, NOT
+  // this data — but the ship gate now pins the data side forever:
+  // signed mesh volume must be positive and match the analytic volume
+  // on every backend, box face-range normals must point outward, and
+  // an asymmetric shape must not come back mirrored.
+  std::printf("== orientation invariants ==\n");
+  {
+    // Box: signed volume + per-face outward normals.
+    CCViewData* o = nullptr; int m = 0;
+    rc = cc_view_data(s, "b", 0.5, &o, &m);
+    check(rc == 0 && m == 1, "orientation: box view data present");
+    if (rc == 0 && m == 1) {
+      const CCViewData& d = o[0];
+      double sv = signedVolume(d);
+      check(sv > 0 && near(sv, 1000.0, 1e-3),
+            "orientation: box signed mesh volume == +1000 (outward winding)");
+      bool outward = d.faceRangeCount == 6;
+      for (int f = 0; f < d.faceRangeCount && outward; ++f) {
+        double nx = 0, ny = 0, nz = 0, cx = 0, cy = 0, cz = 0; int cnt = 0;
+        for (int k = d.faceRanges[f].indexStart;
+             k < d.faceRanges[f].indexStart + d.faceRanges[f].indexCount; ++k) {
+          const float* p = &d.vertices[d.indices[k] * 3];
+          cx += p[0]; cy += p[1]; cz += p[2]; ++cnt;
+          if ((k - d.faceRanges[f].indexStart) % 3 == 0 &&
+              k + 2 < d.faceRanges[f].indexStart + d.faceRanges[f].indexCount) {
+            const float* a = p;
+            const float* b = &d.vertices[d.indices[k + 1] * 3];
+            const float* c = &d.vertices[d.indices[k + 2] * 3];
+            double ux = b[0]-a[0], uy = b[1]-a[1], uz = b[2]-a[2];
+            double vx = c[0]-a[0], vy = c[1]-a[1], vz = c[2]-a[2];
+            nx += uy*vz - uz*vy; ny += uz*vx - ux*vz; nz += ux*vy - uy*vx;
+          }
+        }
+        if (!cnt) { outward = false; break; }
+        cx /= cnt; cy /= cnt; cz /= cnt;
+        // Box centre is (5,5,5); outward means normal . (centroid-centre) > 0.
+        if (nx * (cx - 5) + ny * (cy - 5) + nz * (cz - 5) <= 0) outward = false;
+      }
+      check(outward, "orientation: all 6 box face-range normals point outward");
+    }
+    cc_free_view_data(o, m);
+  }
+  {
+    // Cylinder + asymmetric L prism, created in this same session.
+    char* o2 = nullptr;
+    cc_execute(s, "cylinder cyl 5 20", &o2); cc_free_string(o2); o2 = nullptr;
+    cc_execute(s, "profile L 0,0 30,0 30,10 10,10 10,30 0,30", &o2); cc_free_string(o2); o2 = nullptr;
+    cc_execute(s, "extrude Lprof L 12", &o2); cc_free_string(o2); o2 = nullptr;
+
+    CCViewData* o = nullptr; int m = 0;
+    rc = cc_view_data(s, "cyl", 0.5, &o, &m);
+    check(rc == 0 && m == 1, "orientation: cylinder view data present");
+    if (rc == 0 && m == 1) {
+      double sv = signedVolume(o[0]);
+      // Faceted cylinder under-reads the analytic volume (~1%); the
+      // invariant is the SIGN and the magnitude band, not exactness.
+      check(sv > 0 && sv > 0.95 * o[0].volume && sv < 1.001 * o[0].volume,
+            "orientation: cylinder signed mesh volume > 0, ~analytic");
+    }
+    cc_free_view_data(o, m);
+
+    o = nullptr; m = 0;
+    rc = cc_view_data(s, "Lprof", 0.5, &o, &m);
+    check(rc == 0 && m == 1, "orientation: L prism view data present");
+    if (rc == 0 && m == 1) {
+      const CCViewData& d = o[0];
+      double sv = signedVolume(d);
+      check(sv > 0 && near(sv, 6000.0, 1e-3),
+            "orientation: L prism signed mesh volume == +6000");
+      // Mirror check: the L's notch inner corner is at (10,10); a
+      // mirrored mesh would put it at (20,10) instead.
+      int near1010 = 0, near2010 = 0;
+      for (int vi = 0; vi < d.vertexCount; ++vi) {
+        double x = d.vertices[vi * 3], y = d.vertices[vi * 3 + 1];
+        if (std::fabs(x - 10) < 0.6 && std::fabs(y - 10) < 0.6) ++near1010;
+        if (std::fabs(x - 20) < 0.6 && std::fabs(y - 10) < 0.6) ++near2010;
+      }
+      check(near1010 > 0 && near2010 == 0,
+            "orientation: L prism notch at (10,10), not mirrored to (20,10)");
+    }
+    cc_free_view_data(o, m);
+  }
 
   cc_session_destroy(s);
   std::printf("RESULT: %d pass, %d fail (mc view-data smoke)\n", g_pass, g_fail);

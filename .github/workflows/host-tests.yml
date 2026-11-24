@@ -28,3 +28,8 @@ jobs:
         run: |
           cd Shared/Viewer/Verification
           python verify_tessellation.py
+      - name: Viewer projection guard (v0.2.2 inverted-geometry regression)
+        run: |
+          pip install numpy
+          cd Shared/Viewer/Verification
+          python verify_projection.py

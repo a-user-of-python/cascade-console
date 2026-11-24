@@ -30,6 +30,23 @@ specified in `docs/EXTRAS.md`, with host-prototype numbers in
 
 ## Honest status
 
+**v0.2.2 (2026-11-24): two more device-feedback fixes.** (1)
+Created geometry rendered inside-out on the iPad: the viewer's
+perspective matrix was left-handed while the view matrix, the
+OCCT data and Metal's defaults are right-handed — negative clip w
+inverted face culling and the inverted depth slope let far
+surfaces draw over near ones. The mesh data was proven correct on
+both engine backends (signed-volume / outward-normal invariants,
+now pinned in the test suites); the fix is the right-handed
+projection in `Camera.swift`, plus a projection guard in the Host
+tests workflow. (2) File sharing was off in every shipped build:
+`UIFileSharingEnabled` was set as a build setting but silently
+absent from the shipped Info.plists (verified from the delivered
+IPAs). The app now carries an explicit Info.plist with file
+sharing and open-in-place enabled, and the IPA bundle gate
+asserts both keys in the built app. See `FIXLOG.md` for the full
+v0.2.2 record.
+
 **v0.2.1 (2026-11-23): device-feedback fixes, gated by a
 per-command test matrix on the real device code path.** The user's
 iPad test of v0.2 found the viewer rendering nothing and
