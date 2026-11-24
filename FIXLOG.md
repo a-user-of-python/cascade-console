@@ -1088,3 +1088,182 @@ Properties left, viewport centre, command panel right); a box and
 a cut can both be named "part"; editing a History step rebuilds
 the model; Save Project writes a .cascadeproj that reopens with
 history and folders intact.
+
+## v0.3.1 — the real Mac app, universal (2026-11-24)
+
+The Mac app stops being the v0.1-era stub. New Xcode project
+(`Apps/Mac/CascadeConsoleMac.xcodeproj`) builds the same sources
+as the iPad app: the native OCCT engine (Layer-2 interpreter + mc
+device backend — StubEngine is gone from the Mac target), the
+Metal viewer, and the v0.3.0 UI (part tree / history /
+properties left, viewport centre, command panel right,
+.cascadeproj save/load) adapted to macOS (toolbar placement
+helper, AppKit text-entry differences, label-chip coordinate
+flip). Delivered as a **universal (x86_64 + arm64)** app, ad-hoc
+signed, macOS 14+: one zip runs natively on Intel and
+Apple-silicon Macs; first launch is right-click → Open.
+
+Architecture route: both CascadeKit archs are cross-compiled
+with direct clang on the standard `macos-26` runner and lipo'd;
+the Layer-2 engine is compiled per arch and lipo'd the same way.
+
+x86_64 test execution: the shipped x86_64 engine code was
+executed **natively on a `macos-15-intel` runner** — the full
+per-command matrix (151/151) and view-data smoke (35/35) pass
+there with no translation, repeatedly across every build run of
+this cycle. A Rosetta-translated run of the same suites was
+tried and removed: translated processes could not create files
+in the test tmpdir (the `run` / export matrix cases failed on
+file creation while the identical binaries pass natively), so
+the Intel job is the execution proof of record.
+
+Workflow record (build-mac.yml): the day's macos-26 queue
+cancelled several queued jobs at ~40 min; the workflow was
+restructured to a single build job (one queue exposure) plus the
+Intel job. Three real bugs were found and fixed on the way:
+(1) an `nm | grep -q` gate raced SIGPIPE under `pipefail` (the
+same latent pattern in build-ipa.yml was fixed too — symbol
+output now goes to a file first); (2) the patch-script path lost
+its `ci/` segment in one job block; (3) the kit build step
+diverged from the proven build-ipa/build-native-engine kit
+builds — a one-level include glob (the facade TU needs the
+recursive `find OCCT/src -type d` set plus `OCCT/generated`), a
+HAVE_* define list invented for this workflow (its HAVE_XLIB
+made an OCCT TU demand X11 headers that don't exist on macOS),
+`.c` files compiled as C++ (the flex lexer fails), and a
+nonexistent separate `mc_additions.cpp` in the source list (the
+CI patch injects the additions INTO `Facade/occt_facade.cpp`).
+The kit step now mirrors the proven builds and fails loudly:
+compile failures are recorded per TU and fail the step (an
+earlier draft of the step masked them behind a progress echo).
+Kit caches use the original v1/v2 keys — a v3 draft invented new
+keys that had never been saved, which is why several runs
+recompiled both kits from cold.
+
+Gates on the shipping run: Mac gate green in the shipped
+artifact (lipo archs `x86_64 arm64`; `_cc_execute`,
+`_cc_session_create`, `_mc_clone_shape`, `_mc_export_stl`
+present in BOTH slices; bundle carries catalog.json,
+default.metallib, both OCCT licence texts, samples; version
+0.3.1 (8)); Intel matrix+smoke 186/186 native; all other
+workflows green. Artifact verified again after download from
+the CI artifact (fat Mach-O, Info.plist 0.3.1 (8)).
+
+## v0.3.2 — view panel, restored commands, UI polish (2026-11-24)
+
+v0.3.0's redesign had left controls without UI homes; this
+release gives every one a real one, all driving the SAME state
+the console commands drive (no parallel state):
+
+- **View panel** (new left-panel segment): toggles for grid,
+  axes, face-number labels, edge-number labels; display-mode
+  picker (Shaded / Shaded + Edges / Wireframe / X-Ray /
+  Transparent — the renderer's five modes); azimuth/elevation
+  sliders with numeric readouts wired to the same camera the
+  `view rotate` command sets; standard-view buttons (Top /
+  Front / Right / Iso); Fit and Reset; and the viewer's existing
+  measure flow surfaced (toggle, live distance readout, clear).
+  Implementation: a `ViewState` mirror + `ViewStateChange`
+  commands mapped 1:1 to `ViewerCommand`s; store mutations were
+  extracted into `SceneStore.apply` so panel, console, gestures
+  and project snapshots share one mutation path.
+- **Restored commands as UI**: Undo/Redo buttons in History
+  (the engine's session undo/redo — they act on the live
+  session; a step stays in the list and a later replay rebuilds
+  an undone part); Clear with confirmation (full new-project
+  reset); Rename… on parts and steps (directory kept; step-owned
+  objects rename through a step replay, console-created objects
+  through the engine rename, per the v0.3.0 directory rules);
+  Export STEP / Export STL for the selected part (existing
+  export path into Documents; file sharing is on); part
+  Properties show the engine's real volume / bounding box /
+  face / edge counts (already computed since v0.3.0).
+- **Sim UI (statics only)**: a form in Properties generates the
+  existing `sim ...` commands verbatim (material picker pinned
+  to the engine's 10-material library by a new engine-test check
+  on both backends, fixed/load face fields, force or pressure,
+  mesh size). No new sim code paths. **Thermal stays
+  console-only** — its boundary conditions are a second form
+  family and were not folded in.
+- **Polish/performance pass** (mechanisms, not claims): mesh
+  tessellation conversion moved off the main actor
+  (`Task.detached`); command-catalog grouping/lookups cached
+  instead of re-filtered on every view-body evaluation (they ran
+  per slider tick); the part tree's per-row scan of the step
+  list computed once per body; one shared log-timestamp
+  formatter instead of one allocation per row per render; the
+  command panel split into list and form views so editing a form
+  no longer re-diffs the 15-row list. Verified non-causes:
+  slider drags never executed engine work (draft state only;
+  execution happens once on Add/Apply). Layout kept; native
+  controls and consistent spacing/typography throughout the new
+  UI.
+
+Gates (full stack once, on the shipping commit ef54353f plus a
+one-line-per-call-site compile fix 767cfa76 — explicit
+`ViewStateChange.` prefixes, the only error in either app
+build): matrix 151/151 + smoke 35/35 (mc backend), Swift
+harness 143/143 (grown with view-state execution checks and
+sim-form line pins), engine 153 OCCT / 129 mock + 5 skip, sim
+45/45 both backends (35 + the 10 material-list pins), prototype
+47/47, host tests green; IPA verified from the downloaded
+artifact (com.user.cascadeconsole 0.3.2 (9), both file-sharing
+keys true, catalog + metallib + licences bundled). The Mac app
+shares the version (0.3.2 (9)) and was rebuilt from the same
+code; its gate passed on the same commits.
+
+## v0.4.0 — command expansion batch 1 (2026-11-24)
+
+Six commands implemented in the Layer-2 interpreter over BOTH
+the host OCCT backend and the real mc device backend, each with
+a command-panel UI spec in the same release. No facade or CI
+patch changes were needed — every required entry point
+(mc_revolve, mc_loft, mc_sweep, mc_shell, mc_transform,
+mc_unite) already existed in the cascade-port facade. Name
+directory for each = the command name.
+
+- `revolve <name> <profile> <angleDeg>` — profile revolved about
+  the Y axis (profile x = radius, must be ≥ 0; angle in (0, 360]).
+  Matrix invariants: annular profile → tube V = 576π (bbox ±14,
+  y 0..6); 180° → 288π; axis-touching profile → 500π cylinder;
+  negative-x profile rejected.
+- `loft <name> <prof>@<z> <prof>@<z> [...] [ruled|smooth]` — ≥2
+  sections at strictly increasing heights. Invariants: identical
+  squares → 1000; ruled 10→20 taper → frustum 2333.33;
+  decreasing heights rejected.
+- `sweep <name> <profile> <x,y,z> <x,y,z> [...]` — profile swept
+  along a 3D polyline spine. Invariants: 4×4 along 30 of Z → 480
+  + bbox; bent spine builds with volume > 100.
+- `shell <name> <src> <thickness>` — hollow via offset + cut
+  (same composition as the facade's mc_shell). Invariants:
+  20-box at t=2 → 3904, outside bbox kept, 12 faces; t=15
+  rejected.
+- `mirror <name> <src> <xy|xz|yz> [offset]` — reflection over
+  ccgeom_transform. Invariants: volume preserved (1000); bbox
+  flips (−15..−5 across yz; z 10..20 across xy at offset 10).
+- `pattern <name> <src> linear <count> <dx> <dy> <dz>` /
+  `pattern <name> <src> circular <count> <angleDeg> [x|y|z]` —
+  count 2..10000; circular: full 360° spans step 360/count (no
+  duplicated first copy), partial spans put the last copy
+  exactly on the span; rotation about the named axis through the
+  origin. Invariants: linear 3 @ dx15 → 3000, bbox xmax 40;
+  circular 4 @ 360 z → 4000, bbox ±30 both axes; circular 3 @ 90
+  → 3000; count 1 rejected.
+
+The mock backend stays honest: it proves exactly the cases its
+analytic model covers (revolve 360°, identical-section loft,
+straight-Z sweep, box shell, mirror, linear pattern) and skips
+the rest by name (partial revolve, tapered loft, bent sweep,
+circular pattern). Host test scripts gained `-lTKOffset` (the
+three BRepOffsetAPI classes live there; the CascadeKit builds
+compile all of OCCT and never missed it). Catalog gains the
+`pattern` entry (252 commands).
+
+Gates (full stack once, shipping commit 6b2fb238): mc matrix
+198/198 (151 + 47 new), smoke 35/35, Swift harness 154/154
+(143 + 11: line-builder emission + catalog pins for the six),
+engine OCCT 184/184, engine mock 151 pass + 9 named skips, sim
+45/45 both backends, prototype 47/47, host tests green; IPA
+verified from the downloaded artifact (0.4.0 (10), file sharing
+on, 252-command catalog bundled); Mac app rebuilt from the same
+code at 0.4.0 (10), gate green, Intel job green.

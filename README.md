@@ -36,6 +36,18 @@ specified in `docs/EXTRAS.md`, with host-prototype numbers in
 
 ## Honest status
 
+**v0.4.0 (2026-11-24): command expansion batch 1** — `revolve`,
+`loft`, `sweep`, `shell`, `mirror`, and `pattern` (linear +
+circular) implemented in the interpreter over both backends, each
+proven by per-command matrix cases with analytic invariants on
+the real device backend and given a command-panel form in the
+same release. **v0.3.2:** every view control and the previously
+console-only commands (undo/redo, rename, export, sim statics)
+got real UI homes, plus a UI polish/performance pass. **v0.3.1:**
+the Mac app became a full build — native engine, Metal viewer,
+same UI — as a universal (x86_64 + arm64) binary. Full records:
+`FIXLOG.md`.
+
 **v0.3.0 (2026-11-24): the UI-first redesign.** The iPad app no
 longer opens on a text console. LEFT panel: the part tree (user
 folders + per-command name directories), the parametric history,
@@ -52,8 +64,8 @@ directory → unique bare match → an ambiguity error, never a
 guess). Projects save as `.cascadeproj` (steps + folders + viewer
 state; reopening replays the history); legacy `.cascade` scripts
 still run as scripts and can be imported as a one-step project.
-The Mac app remains on the stub engine (below). Full record:
-`FIXLOG.md` (v0.3.0).
+(At v0.3.0 the Mac app was still on the stub engine; v0.3.1 below
+fixed that.) Full record: `FIXLOG.md` (v0.3.0).
 
 **v0.2.3 (2026-11-24): the viewer fan fix, and the first gate that
 runs the Swift viewer code.** The user's iPad test of v0.2.2 showed
@@ -104,8 +116,8 @@ v0.2.1 fixes all three, and adds a CI job
 CascadeKit from the same pinned checkout and runs every advertised
 command through the real mc backend with a real invariant per
 command — the class of failure that shipped in v0.2 cannot pass
-that job. See `FIXLOG.md` for the full v0.2.1 record. The Mac app
-remains on the stub engine (below).
+that job. See `FIXLOG.md` for the full v0.2.1 record. (The Mac
+app was still on the stub engine at this point; see v0.3.1.)
 
 **v0.2 (2026-11-23): the native engine is linked into the iPad
 build.** The C++ Layer-2 session interpreter (`Core/native/`, a port
@@ -131,19 +143,20 @@ midpoint. **Camera**: `view rotate <azimuth> <elevation>` (degrees,
 absolute; `view rotate by ...` for relative) and compact XYZ arrows at
 the origin (`view axes on|off`, ~20% of the scene diagonal). After every successful command the app pulls the
 session tessellation (`cc_view_data`) through the CCM1 contract into
-the real Metal viewer. The **Mac app remains on the stub engine**
-for now: its target still carries its own per-app engine types and
-the Shared adaptation pass (INTEGRATION-NOTES resolution (f)) has
-not landed — the exact remaining steps are recorded in
-`Apps/Mac/Package.swift`. Device verdict (install + run on a real
-iPad) is still the user's to give; see `docs/ENGINE-REPORT.md` and
-`FIXLOG.md` for the full v0.2 record.
+the real Metal viewer. **Mac status (current):** since v0.3.1
+the Mac app is a full build — the same native engine, Metal
+viewer and UI as the iPad app, shipped as a **universal
+(x86_64 + arm64)** binary that runs on Intel and Apple-silicon
+Macs (see the v0.3.1/v0.3.2/v0.4.0 entries in `FIXLOG.md`; the
+current Mac version tracks the iPad version). Device verdict
+(install + run on a real iPad) is still the user's to give; see
+`docs/ENGINE-REPORT.md` and `FIXLOG.md` for the full v0.2 record.
 
 ## Repository layout
 
 | Path | What |
 |---|---|
-| `Apps/Mac/` | SwiftUI macOS app (SwiftPM, macOS 14+; Liquid Glass on macOS 26 with material fallback) |
+| `Apps/Mac/` | SwiftUI macOS app (Xcode project, macOS 14+; universal x86_64 + arm64; Liquid Glass on macOS 26 with material fallback) |
 | `Apps/iPad/` | SwiftUI iPad app (system picker **and** an in-app Documents browser — the in-app browser is the supported path when sideloading) |
 | `Shared/` | One shared core for both apps: unified models, settings keys, engine protocol, command history, the Metal viewer (included once), and `Resources/catalog.json` |
 | `Core/` | Command interpreter: Python reference prototype (`python/`, 47 tests), Layer-2 session façade design (`facade/cc_facade.h`) over the existing cascade-port Layer-1 `mc_*` OCCT façade |
@@ -170,12 +183,13 @@ subscriptions involved anywhere in this project.
 2. When it finishes, download the `CascadeConsoleMac-unsigned`
    artifact and unzip it.
 3. Run the app from the unzipped folder, or drag it to Applications.
-   Because it is unsigned, the first launch needs a right-click →
-   **Open** (Gatekeeper) — or build it yourself:
-   `cd Apps/Mac && swift build` with Xcode 26 installed.
-4. The Mac build must be the correct architecture for your machine;
-   the CI artifact is Apple-silicon. On an Intel Mac, build from
-   source with the command above (the code is architecture-neutral).
+   Because it is ad-hoc signed (no paid certificate), the first
+   launch needs a right-click → **Open** (Gatekeeper); on macOS 15+
+   you may instead need System Settings → Privacy & Security →
+   **Open Anyway**.
+4. The CI artifact is a **universal binary (x86_64 + arm64)** — one
+   download runs natively on both Intel and Apple-silicon Macs,
+   macOS 14 or later. No build-from-source step is needed.
 
 ### iPad
 
