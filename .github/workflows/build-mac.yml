@@ -58,14 +58,14 @@ jobs:
       - name: Restore cached CascadeKit (macOS arm64)
         uses: actions/cache@v4
         with:
-          path: build/kitlib-arm
-          key: cascade-console-cascadekit-macos-arm64-v2
+          path: build/kitlib-mac-arm64
+          key: cascadekit-mac-arm64-${{ env.CASCADE_IOS_SHA }}-${{ hashFiles('Core/native/ci/patch_cascade_port.py') }}-v1
 
       - name: Restore cached CascadeKit (macOS x86_64)
         uses: actions/cache@v4
         with:
-          path: build/kitlib-x86
-          key: cascade-console-cascadekit-macos-x86_64-v2
+          path: build/kitlib-mac-x86_64
+          key: cascadekit-mac-x86_64-${{ env.CASCADE_IOS_SHA }}-${{ hashFiles('Core/native/ci/patch_cascade_port.py') }}-v1
 
       - name: Build CascadeKits (only the archs whose cache missed)
         run: |
@@ -134,16 +134,16 @@ jobs:
             cd ..
             echo "CascadeKit $1 built: $(lipo -archs "$3/libCascadeKit.a")"
           }
-          build_kit arm64 "$GITHUB_WORKSPACE/build/kitobj-arm" "$GITHUB_WORKSPACE/build/kitlib-arm"
-          build_kit x86_64 "$GITHUB_WORKSPACE/build/kitobj-x86" "$GITHUB_WORKSPACE/build/kitlib-x86"
+          build_kit arm64 "$GITHUB_WORKSPACE/build/kitobj-arm" "$GITHUB_WORKSPACE/build/kitlib-mac-arm64"
+          build_kit x86_64 "$GITHUB_WORKSPACE/build/kitobj-x86" "$GITHUB_WORKSPACE/build/kitlib-mac-x86_64"
 
       - name: Lipo CascadeKit universal + build Layer-2 engine (both archs)
         run: |
           set -euo pipefail
           mkdir -p build/kitlib-mac build/engine-mac-arm64 build/engine-mac-x86_64
           lipo -create \
-            build/kitlib-arm/libCascadeKit.a \
-            build/kitlib-x86/libCascadeKit.a \
+            build/kitlib-mac-arm64/libCascadeKit.a \
+            build/kitlib-mac-x86_64/libCascadeKit.a \
             -output build/kitlib-mac/libCascadeKit.a
           echo "CascadeKit archs: $(lipo -archs build/kitlib-mac/libCascadeKit.a)"
           SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
