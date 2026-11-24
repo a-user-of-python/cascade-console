@@ -591,6 +591,70 @@ int main(int argc, char** argv) {
           near(j.volume("box:p2"), 8.0, 1e-9) && near(j.volume("union:u"), 16.0, 1e-6),
           "ns replay: qualified names + volumes reproduce exactly (incl. auto-suffix)");
   }
+  // ---- v0.4.0 batch 1: revolve / loft / sweep / shell / mirror / pattern ------
+  // Same analytic invariants as the mc matrix, per backend. Where
+  // the analytic mock is documented to be inexact (loft taper,
+  // bent sweep, circular pattern of rotated boxes) or limited
+  // (partial revolve), the case is a named skip on the mock and a
+  // hard assertion on OCCT — the mc matrix asserts all of them.
+  { Session i;
+    const double PI = 3.14159265358979323846;
+    double vol, area, bb[6]; int f, e;
+    check(i.run("profile rp 10,0 14,0 14,6 10,6") == 0, "v4 revolve: profile");
+    check(i.run("revolve rv rp 360") == 0, "v4 revolve: rc 0");
+    check(near(i.volume("rv"), 576.0 * PI, 0.5), "v4 revolve: volume == 576pi (Pappus / tube)");
+    cc_object_stats(i.s, "rv", &vol, &area, bb, &f, &e);
+    check(near(bb[0], -14, 1e-6) && near(bb[3], 14, 1e-6) && near(bb[4], 6, 1e-6),
+          "v4 revolve: bbox spans the swept diameter");
+    if (!mock) {
+      check(i.run("revolve rv2 rp 180") == 0, "v4 revolve 180: rc 0");
+      check(near(i.volume("rv2"), 288.0 * PI, 0.5), "v4 revolve 180: volume == 288pi");
+    } else {
+      skip("v4 revolve partial angle (mock bbox is exact only at 360)");
+    }
+    check(i.run("profile sq 0,0 10,0 10,10 0,10") == 0, "v4 loft: profile");
+    check(i.run("profile sq2 0,0 20,0 20,20 0,20") == 0, "v4 loft: profile 2");
+    check(i.run("loft lf sq@0 sq@10") == 0, "v4 loft: rc 0");
+    check(near(i.volume("lf"), 1000.0, 1e-3), "v4 loft: identical sections == prism 1000");
+    if (!mock) {
+      check(i.run("loft tf sq@0 sq2@10 ruled") == 0, "v4 loft ruled: rc 0");
+      check(near(i.volume("tf"), 10.0 / 3.0 * 700.0, 0.5), "v4 loft ruled: frustum volume 2333.33");
+    } else {
+      skip("v4 loft taper volume (mock average-area rule is exact only for identical sections)");
+    }
+    check(i.run("profile sq4 0,0 4,0 4,4 0,4") == 0, "v4 sweep: profile");
+    check(i.run("sweep sw sq4 0,0,0 0,0,30") == 0, "v4 sweep: rc 0");
+    check(near(i.volume("sw"), 480.0, 1e-3), "v4 sweep: straight Z spine volume == 480");
+    if (!mock) {
+      check(i.run("sweep sw2 sq4 0,0,0 0,0,10 10,0,10") == 0, "v4 sweep bent: rc 0");
+    } else {
+      skip("v4 sweep bent spine (mock is exact only for a single straight segment)");
+    }
+    check(i.run("box sh 20 20 20") == 0, "v4 shell: box");
+    check(i.run("shell shx sh 2") == 0, "v4 shell: rc 0");
+    check(near(i.volume("shx"), 3904.0, 1e-3), "v4 shell: volume == 8000 - 4096 == 3904");
+    cc_object_stats(i.s, "shx", &vol, &area, bb, &f, &e);
+    check(f == 12, "v4 shell: 12 faces (6 outer + 6 inner)");
+    check(i.run("box mb 10 10 10 at 5,0,0") == 0, "v4 mirror: box");
+    check(i.run("mirror mm mb yz") == 0, "v4 mirror: rc 0");
+    check(near(i.volume("mm"), 1000.0, 1e-6), "v4 mirror: volume preserved");
+    cc_object_stats(i.s, "mm", &vol, &area, bb, &f, &e);
+    check(near(bb[0], -15, 1e-9) && near(bb[3], -5, 1e-9), "v4 mirror: bbox flips across YZ");
+    check(i.run("box pb 10 10 10") == 0, "v4 pattern: box");
+    check(i.run("pattern pl pb linear 3 15 0 0") == 0, "v4 pattern linear: rc 0");
+    check(near(i.volume("pl"), 3000.0, 1e-6), "v4 pattern linear: volume == 3 copies");
+    if (!mock) {
+      check(i.run("box cb 10 10 10 at 20,0,0") == 0, "v4 pattern circular: box");
+      check(i.run("pattern pc cb circular 4 360 z") == 0, "v4 pattern circular: rc 0");
+      check(near(i.volume("pc"), 4000.0, 1e-6), "v4 pattern circular: volume == 4 copies");
+      cc_object_stats(i.s, "pc", &vol, &area, bb, &f, &e);
+      check(near(bb[0], -30, 1e-6) && near(bb[3], 30, 1e-6) &&
+            near(bb[1], -30, 1e-6) && near(bb[4], 30, 1e-6),
+            "v4 pattern circular: copies at the compass points");
+    } else {
+      skip("v4 pattern circular (mock booleans are exact only between unrotated box-like shapes)");
+    }
+  }
   std::printf("RESULT: %d pass, %d fail, %d skip (backend %s)\n", g_pass, g_fail, g_skip, backend);
   return g_fail == 0 ? 0 : 1;
 }

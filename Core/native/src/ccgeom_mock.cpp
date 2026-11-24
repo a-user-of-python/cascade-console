@@ -92,6 +92,141 @@ CCGeomShape* ccgeom_prism(const double* xy, int n, double dist, int* err) {
   double bb[6] = {mnx, mny, 0, mxx, mxy, dist};
   return mk(a * dist, 2 * a + per * dist, bb, n + 2, 3 * n, false, err);
 }
+
+// ---- v0.4.0: revolve / loft / sweep / shell (analytic where exact) -----------
+// Revolve volume is EXACT by Pappus's centroid theorem for any
+// angle: V = theta * Mx, where Mx = the profile's first moment
+// about the Y axis (the shoelace-family sum below). Its bbox is
+// exact for a full 360-degree revolve; for partial angles the
+// mock fails loudly rather than inventing bounds. Loft volume
+// uses the average-area rule — exact when consecutive sections
+// are identical (the case the engine tests assert on the mock;
+// taper invariants are asserted on the real backends). Sweep
+// volume is exact for a single straight spine segment along the
+// Z axis (the profile normal): V = A * L; other spines fail
+// loudly. Shell is exact for box-like sources only. Face/edge counts for these four are placeholders
+// (operand-derived), per this file's boolean precedent — the
+// harness asserts volume/bbox only.
+static void polygonMoments(const double* xy, int n, double* area,
+                           double* momentY, double* perim) {
+  double a = 0, m = 0, per = 0;
+  for (int i = 0; i < n; ++i) {
+    int j = (i + 1) % n;
+    double c = xy[2 * i] * xy[2 * j + 1] - xy[2 * j] * xy[2 * i + 1];
+    a += c;
+    m += (xy[2 * i] + xy[2 * j]) * c;
+    per += std::hypot(xy[2 * j] - xy[2 * i], xy[2 * j + 1] - xy[2 * i + 1]);
+  }
+  *area = a / 2.0;         // signed
+  *momentY = m / 6.0;      // signed first moment about the Y axis
+  *perim = per;
+}
+CCGeomShape* ccgeom_revolve(const double* xy, int n, double angleDeg, int* err) {
+  if (!xy || n < 3) { setErr(err, CCGEOM_ERR_INVALID_ARG, "mock revolve: < 3 points"); return nullptr; }
+  if (!(angleDeg > 0.0) || angleDeg > 360.0) { setErr(err, CCGEOM_ERR_INVALID_ARG, "mock revolve: angle must be in (0, 360]"); return nullptr; }
+  double area, moment, per;
+  polygonMoments(xy, n, &area, &moment, &per);
+  double theta = angleDeg * M_PI / 180.0;
+  double vol = std::fabs(theta * moment);
+  double mxx = 0, mny = 1e300, mxy = -1e300;
+  for (int i = 0; i < n; ++i) {
+    mxx = std::max(mxx, xy[2 * i]);
+    mny = std::min(mny, xy[2 * i + 1]); mxy = std::max(mxy, xy[2 * i + 1]);
+  }
+  if (angleDeg != 360.0) {
+    setErr(err, CCGEOM_ERR_OCCT, "mock limitation: revolve bbox is exact only for a full 360-degree revolve");
+    return nullptr;
+  }
+  double bb[6] = {-mxx, mny, -mxx, mxx, mxy, mxx};
+  // Surface area of a full revolve: each profile edge sweeps a
+  // band of area (edge length) x (centroid path 2*pi*x-bar_edge);
+  // summed via the same moment machinery per edge.
+  double surf = 0;
+  for (int i = 0; i < n; ++i) {
+    int j = (i + 1) % n;
+    double len = std::hypot(xy[2 * j] - xy[2 * i], xy[2 * j + 1] - xy[2 * i + 1]);
+    double xc = (xy[2 * i] + xy[2 * j]) / 2.0;
+    surf += len * 2.0 * M_PI * std::fabs(xc);
+  }
+  (void)per;
+  return mk(vol, surf, bb, n, 3 * n, false, err);
+}
+CCGeomShape* ccgeom_loft(const double* const* profiles, const int* counts,
+                         const double* heights, int profileCount,
+                         int ruled, int* err) {
+  (void)ruled;
+  if (!profiles || !counts || !heights || profileCount < 2) {
+    setErr(err, CCGEOM_ERR_INVALID_ARG, "mock loft: needs >= 2 profiles"); return nullptr;
+  }
+  double vol = 0;
+  double bb[6] = {1e300, 1e300, heights[0], -1e300, -1e300, heights[profileCount - 1]};
+  std::vector<double> areas;
+  for (int i = 0; i < profileCount; ++i) {
+    if (!profiles[i] || counts[i] < 3) { setErr(err, CCGEOM_ERR_INVALID_ARG, "mock loft: every profile needs >= 3 points"); return nullptr; }
+    double a, m, p;
+    polygonMoments(profiles[i], counts[i], &a, &m, &p);
+    areas.push_back(std::fabs(a));
+    for (int j = 0; j < counts[i]; ++j) {
+      bb[0] = std::min(bb[0], profiles[i][2 * j]);
+      bb[1] = std::min(bb[1], profiles[i][2 * j + 1]);
+      bb[3] = std::max(bb[3], profiles[i][2 * j]);
+      bb[4] = std::max(bb[4], profiles[i][2 * j + 1]);
+    }
+  }
+  for (int i = 0; i + 1 < profileCount; ++i)
+    vol += (areas[i] + areas[i + 1]) / 2.0 * (heights[i + 1] - heights[i]);
+  return mk(vol, 0, bb, 0, 0, false, err);
+}
+CCGeomShape* ccgeom_sweep(const double* xy, int n,
+                          const double* pathPts, int pathCount, int* err) {
+  if (!xy || n < 3) { setErr(err, CCGEOM_ERR_INVALID_ARG, "mock sweep: < 3 points"); return nullptr; }
+  if (!pathPts || pathCount < 2) { setErr(err, CCGEOM_ERR_INVALID_ARG, "mock sweep: path needs >= 2 points"); return nullptr; }
+  if (pathCount != 2) {
+    setErr(err, CCGEOM_ERR_OCCT, "mock limitation: sweep is exact only for a single straight spine segment");
+    return nullptr;
+  }
+  double a, m, p;
+  polygonMoments(xy, n, &a, &m, &p);
+  double dx = pathPts[3] - pathPts[0], dy = pathPts[4] - pathPts[1], dz = pathPts[5] - pathPts[2];
+  double len = std::sqrt(dx * dx + dy * dy + dz * dz);
+  if (len <= 0) { setErr(err, CCGEOM_ERR_INVALID_ARG, "mock sweep: zero-length path"); return nullptr; }
+  if (std::fabs(dx) > 1e-12 || std::fabs(dy) > 1e-12) {
+    setErr(err, CCGEOM_ERR_OCCT, "mock limitation: sweep is exact only for a spine along the Z axis (the profile normal)");
+    return nullptr;
+  }
+  double vol = std::fabs(a) * len;
+  double mnx = 1e300, mny = 1e300, mxx = -1e300, mxy = -1e300;
+  for (int i = 0; i < n; ++i) {
+    mnx = std::min(mnx, xy[2 * i]); mxx = std::max(mxx, xy[2 * i]);
+    mny = std::min(mny, xy[2 * i + 1]); mxy = std::max(mxy, xy[2 * i + 1]);
+  }
+  double bb[6] = {std::min(mnx + pathPts[0], mnx + pathPts[3]),
+                  std::min(mny + pathPts[1], mny + pathPts[4]),
+                  std::min(0.0 + pathPts[2], 0.0 + pathPts[5]),
+                  std::max(mxx + pathPts[0], mxx + pathPts[3]),
+                  std::max(mxy + pathPts[1], mxy + pathPts[4]),
+                  std::max(0.0 + pathPts[2], 0.0 + pathPts[5])};
+  return mk(vol, 0, bb, 0, 0, false, err);
+}
+CCGeomShape* ccgeom_shell(CCGeomShape* s, double thickness, int* err) {
+  if (!s) { setErr(err, CCGEOM_ERR_INVALID_ARG, "mock shell: null shape"); return nullptr; }
+  if (!(thickness > 0.0)) { setErr(err, CCGEOM_ERR_INVALID_ARG, "mock shell: thickness must be > 0"); return nullptr; }
+  if (!s->boxLike) {
+    setErr(err, CCGEOM_ERR_OCCT, "mock limitation: shell is exact only for box-like shapes");
+    return nullptr;
+  }
+  double dx = s->bbox[3] - s->bbox[0] - 2 * thickness;
+  double dy = s->bbox[4] - s->bbox[1] - 2 * thickness;
+  double dz = s->bbox[5] - s->bbox[2] - 2 * thickness;
+  if (dx <= 0 || dy <= 0 || dz <= 0) {
+    setErr(err, CCGEOM_ERR_INVALID_ARG, "mock shell: thickness too large for the shape");
+    return nullptr;
+  }
+  double vol = s->volume - dx * dy * dz;
+  double area = s->area + 2 * (dx * dy + dx * dz + dy * dz);
+  double bb[6]; std::memcpy(bb, s->bbox, sizeof(bb));
+  return mk(vol, area, bb, 12, 24, false, err);
+}
 static double overlapVol(const CCGeomShape* a, const CCGeomShape* b) {
   double dx = std::min(a->bbox[3], b->bbox[3]) - std::max(a->bbox[0], b->bbox[0]);
   double dy = std::min(a->bbox[4], b->bbox[4]) - std::max(a->bbox[1], b->bbox[1]);

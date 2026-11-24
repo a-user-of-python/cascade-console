@@ -60,6 +60,29 @@ CCGeomShape* ccgeom_torus(double ringR, double tubeR, int* err);
 /// xy: n (x,y) pairs of a closed polygon (closed automatically).
 CCGeomShape* ccgeom_prism(const double* xy, int n, double dist, int* err);
 
+// ---- profile solids of revolution / through sections / along a path ----------
+// (v0.4.0 command expansion batch 1: revolve / loft / sweep / shell.
+//  Mirror and patterns need no new entry points — the interpreter
+//  composes them from ccgeom_transform + ccgeom_unite.)
+/// Revolve the XY-plane profile around the Y axis (the profile's
+/// own v axis: a profile point (x, y) sits at radius x, height y)
+/// by angleDeg degrees (0 < angle <= 360). Profile x must be >= 0.
+CCGeomShape* ccgeom_revolve(const double* xy, int n, double angleDeg, int* err);
+/// Loft a solid through `profileCount` XY-plane polygon profiles,
+/// section i placed at z = heights[i] (strictly increasing).
+/// ruled != 0 = straight (ruled) interpolation between sections,
+/// 0 = smooth. profiles[i] holds counts[i] (x,y) pairs.
+CCGeomShape* ccgeom_loft(const double* const* profiles, const int* counts,
+                         const double* heights, int profileCount,
+                         int ruled, int* err);
+/// Sweep the XY-plane profile along the polyline spine through
+/// pathCount 3D points (3 doubles each, >= 2 points).
+CCGeomShape* ccgeom_sweep(const double* xy, int n,
+                          const double* pathPts, int pathCount, int* err);
+/// Closed hollow solid: the shape offset inward by `thickness`
+/// (outside dimensions kept, no faces removed — no openings).
+CCGeomShape* ccgeom_shell(CCGeomShape* s, double thickness, int* err);
+
 // ---- booleans (BRepAlgoAPI_Fuse / Cut / Common) -------------------------------
 CCGeomShape* ccgeom_unite(CCGeomShape* a, CCGeomShape* b, int* err);
 CCGeomShape* ccgeom_subtract(CCGeomShape* a, CCGeomShape* b, int* err);

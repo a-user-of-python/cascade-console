@@ -54,7 +54,8 @@ public final class NativeEngine: CascadeEngine, EngineViewDataProviding {
          "fillet", "chamfer", "translate", "rotate", "copy", "duplicate",
          "rename", "delete", "clear", "list", "info", "volume",
          "measure-volume", "undo", "redo", "history", "shape-history",
-         "export", "export-step", "export-stl", "view", "run", "echo", "help", "sim"]
+         "export", "export-step", "export-stl", "view", "run", "echo", "help", "sim",
+         "revolve", "loft", "sweep", "shell", "mirror", "pattern"]
     }
 
     public func execute(command: String) async -> CommandResult {

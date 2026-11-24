@@ -43,12 +43,19 @@
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepGProp.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepOffsetAPI_MakePipe.hxx>
+#include <BRepOffsetAPI_MakeThickSolid.hxx>
+#include <BRepOffsetAPI_ThruSections.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
+#include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRepPrimAPI_MakeSphere.hxx>
 #include <BRepPrimAPI_MakeTorus.hxx>
+#include <NCollection_List.hxx>
+#include <Precision.hxx>
+#include <gp_Ax1.hxx>
 #include <BRep_Tool.hxx>
 #include <GProp_GProps.hxx>
 #include <Poly_Triangulation.hxx>
@@ -140,6 +147,95 @@ CCGeomShape* ccgeom_prism(const double* xy, int n, double dist, int* err) {
     if (!poly.IsDone()) throw std::runtime_error("polygon builder did not finish");
     TopoDS_Face face = BRepBuilderAPI_MakeFace(poly.Wire()).Face();
     return BRepPrimAPI_MakePrism(face, gp_Vec(0.0, 0.0, dist)).Shape();
+  });
+}
+
+// ---- v0.4.0: revolve / loft / sweep / shell (host OCCT backend) --------------
+// These mirror the cascade-port façade's mc_revolve / mc_loft /
+// mc_sweep / mc_shell semantics exactly (same OCCT builders, same
+// conventions), so a command proven here means the same thing on
+// the device backend; the per-command matrix proves it there too.
+static TopoDS_Face polygonFaceAt(const double* xy, int n, double z) {
+  BRepBuilderAPI_MakePolygon poly;
+  for (int i = 0; i < n; ++i) poly.Add(gp_Pnt(xy[2 * i], xy[2 * i + 1], z));
+  poly.Close();
+  if (!poly.IsDone()) throw std::runtime_error("polygon builder did not finish");
+  return BRepBuilderAPI_MakeFace(poly.Wire()).Face();
+}
+
+CCGeomShape* ccgeom_revolve(const double* xy, int n, double angleDeg, int* err) {
+  if (!xy || n < 3) { setErr(err, CCGEOM_ERR_INVALID_ARG, "revolve: profile needs >= 3 points"); return nullptr; }
+  if (!(angleDeg > 0.0) || angleDeg > 360.0) { setErr(err, CCGEOM_ERR_INVALID_ARG, "revolve: angle must be in (0, 360]"); return nullptr; }
+  return run("revolve", err, [&] {
+    TopoDS_Face face = polygonFaceAt(xy, n, 0.0);
+    gp_Ax1 axis(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 1.0, 0.0));
+    BRepPrimAPI_MakeRevol revol(face, axis, angleDeg * M_PI / 180.0, Standard_True);
+    revol.Build();
+    if (!revol.IsDone()) throw std::runtime_error("revolve builder did not finish");
+    return revol.Shape();
+  });
+}
+
+CCGeomShape* ccgeom_loft(const double* const* profiles, const int* counts,
+                         const double* heights, int profileCount,
+                         int ruled, int* err) {
+  if (!profiles || !counts || !heights || profileCount < 2) {
+    setErr(err, CCGEOM_ERR_INVALID_ARG, "loft: needs >= 2 profiles"); return nullptr;
+  }
+  for (int i = 0; i < profileCount; ++i)
+    if (!profiles[i] || counts[i] < 3) { setErr(err, CCGEOM_ERR_INVALID_ARG, "loft: every profile needs >= 3 points"); return nullptr; }
+  return run("loft", err, [&] {
+    BRepOffsetAPI_ThruSections maker(Standard_True,
+                                     ruled ? Standard_True : Standard_False,
+                                     Precision::Confusion());
+    for (int i = 0; i < profileCount; ++i) {
+      BRepBuilderAPI_MakePolygon poly;
+      for (int j = 0; j < counts[i]; ++j)
+        poly.Add(gp_Pnt(profiles[i][2 * j], profiles[i][2 * j + 1], heights[i]));
+      poly.Close();
+      if (!poly.IsDone()) throw std::runtime_error("polygon builder did not finish");
+      maker.AddWire(poly.Wire());
+    }
+    maker.Build();
+    if (!maker.IsDone()) throw std::runtime_error("loft builder did not finish");
+    return maker.Shape();
+  });
+}
+
+CCGeomShape* ccgeom_sweep(const double* xy, int n,
+                          const double* pathPts, int pathCount, int* err) {
+  if (!xy || n < 3) { setErr(err, CCGEOM_ERR_INVALID_ARG, "sweep: profile needs >= 3 points"); return nullptr; }
+  if (!pathPts || pathCount < 2) { setErr(err, CCGEOM_ERR_INVALID_ARG, "sweep: path needs >= 2 points"); return nullptr; }
+  return run("sweep", err, [&] {
+    TopoDS_Face face = polygonFaceAt(xy, n, 0.0);
+    BRepBuilderAPI_MakePolygon spine;
+    for (int i = 0; i < pathCount; ++i)
+      spine.Add(gp_Pnt(pathPts[3 * i], pathPts[3 * i + 1], pathPts[3 * i + 2]));
+    if (!spine.IsDone()) throw std::runtime_error("spine builder did not finish");
+    BRepOffsetAPI_MakePipe pipe(spine.Wire(), face);
+    pipe.Build();
+    if (!pipe.IsDone()) throw std::runtime_error("sweep builder did not finish");
+    return pipe.Shape();
+  });
+}
+
+CCGeomShape* ccgeom_shell(CCGeomShape* s, double thickness, int* err) {
+  if (!s) { setErr(err, CCGEOM_ERR_INVALID_ARG, "shell: null shape"); return nullptr; }
+  if (!(thickness > 0.0)) { setErr(err, CCGEOM_ERR_INVALID_ARG, "shell: thickness must be > 0"); return nullptr; }
+  return run("shell", err, [&]() -> TopoDS_Shape {
+    // Identical composition to the façade's mc_shell: the bare
+    // inward offset is NOT the hollow part — the hollow part is
+    // the offset solid cut from the original.
+    BRepOffsetAPI_MakeThickSolid mk;
+    NCollection_List<TopoDS_Shape> noOpenings;
+    mk.MakeThickSolidByJoin(s->shape, noOpenings, -thickness,
+                            Precision::Confusion());
+    mk.Build();
+    if (!mk.IsDone()) throw std::runtime_error("shell offset builder did not finish");
+    BRepAlgoAPI_Cut cut(s->shape, mk.Shape());
+    cut.Build();
+    if (!cut.IsDone()) throw std::runtime_error("shell cut did not finish");
+    return cut.Shape();
   });
 }
 

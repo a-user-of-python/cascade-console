@@ -215,7 +215,8 @@ const std::set<std::string>& mutatingCommands() {
     "set", "box", "cylinder", "sphere", "cone", "torus", "profile",
     "extrude", "union", "cut", "intersect", "fuse", "common", "fillet",
     "chamfer", "translate", "rotate", "copy", "duplicate", "rename",
-    "delete", "clear"};
+    "delete", "clear",
+    "revolve", "loft", "sweep", "shell", "mirror", "pattern"};
   return kMut;
 }
 
@@ -228,6 +229,13 @@ const char* const kHelpLines[] = {
   "torus <name> <ringR> <tubeR> [at x,y,z] — torus in the XY plane",
   "profile <name> x,y x,y x,y ... — closed 2D polygon profile",
   "extrude <name> <profile> <dist> — extrude a profile along +Z",
+  "revolve <name> <profile> <angleDeg> — revolve a profile about the Y axis (profile x = radius, y = height; angle <= 360)",
+  "loft <name> <profile>@<z> <profile>@<z> [...] [ruled] — loft a solid through profile sections at increasing heights",
+  "sweep <name> <profile> <x,y,z> <x,y,z> [...] — sweep a profile along a polyline path",
+  "shell <name> <src> <thickness> — closed hollow solid, walls <thickness> mm thick (outside size kept)",
+  "mirror <name> <src> <xy|xz|yz> [offset] — mirrored copy across a plane through the origin (or offset along its normal)",
+  "pattern <name> <src> linear <count> <dx> <dy> <dz> — fused row of copies",
+  "pattern <name> <src> circular <count> <angleDeg> [x|y|z] — fused ring of copies about an axis through the origin (360 = evenly spaced)",
   "union <name> <a> <b> — fuse two solids (catalog: fuse <a> <b> as <name>)",
   "cut <name> <a> <b> — subtract b from a (catalog: cut <a> minus <b> as <name>)",
   "intersect <name> <a> <b> — common volume (catalog: common <a> <b> as <name>)",
@@ -723,6 +731,111 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
       result = "Created " + keyDisplay(key) + ".";
       goto done;
     }
+    // ---- v0.4.0 batch 1: revolve / loft / sweep -------------------------------------
+    if (cmd == "revolve") {
+      std::string name, prof, angleTok;
+      std::vector<std::string> before;
+      if (splitAs(args, cmd, name, before)) {
+        if (before.size() != 2) throw arity("revolve", "write: revolve <profile> <angleDeg> as <name>");
+        prof = before[0]; angleTok = before[1];
+      } else {
+        if (args.size() != 3) throw arity("revolve", "write: revolve <name> <profile> <angleDeg>");
+        name = args[0]; prof = args[1]; angleTok = args[2];
+      }
+      checkName(name);
+      std::string profKey = resolveProfileKey(prof);
+      auto it = profiles.find(profKey);
+      double angle = num(angleTok);
+      if (!(angle > 0.0) || angle > 360.0)
+        throw invalidParam("revolve angle must be in (0, 360] degrees.");
+      std::vector<double> xy;
+      for (auto& p : it->second) {
+        if (p.first < -1e-9)
+          throw invalidParam("revolve: profile points must lie on or to the right of the Y axis (x >= 0) — in a revolve profile, x is the radius and y is the height.");
+        xy.push_back(p.first); xy.push_back(p.second);
+      }
+      std::string key = claimName("revolve", name);
+      objects[key] = callShape("revolve", [&](int* e) { return ccgeom_revolve(xy.data(), (int)it->second.size(), angle, e); });
+      result = "Created " + keyDisplay(key) + ".";
+      goto done;
+    }
+    if (cmd == "loft") {
+      std::string name;
+      std::vector<std::string> sectionToks;
+      std::vector<std::string> before;
+      if (splitAs(args, cmd, name, before)) {
+        sectionToks = before;
+      } else {
+        if (args.size() < 3) throw arity("loft", "write: loft <name> <profile>@<z> <profile>@<z> [...] [ruled]");
+        name = args[0]; sectionToks = tail(args, 1);
+      }
+      checkName(name);
+      int ruled = 0;
+      if (!sectionToks.empty() &&
+          (sectionToks.back() == "ruled" || sectionToks.back() == "smooth")) {
+        ruled = sectionToks.back() == "ruled" ? 1 : 0;
+        sectionToks.pop_back();
+      }
+      if (sectionToks.size() < 2)
+        throw arity("loft", "write: loft <name> <profile>@<z> <profile>@<z> [...] [ruled] — at least two sections");
+      std::vector<const double*> profPtrs;
+      std::vector<int> counts;
+      std::vector<double> heights;
+      std::vector<std::vector<double>> owned;
+      for (auto& tok : sectionToks) {
+        auto at = tok.rfind('@');
+        if (at == std::string::npos)
+          throw parseError("loft section '" + tok + "' must be written <profile>@<z>.");
+        std::string profKey = resolveProfileKey(tok.substr(0, at));
+        auto it = profiles.find(profKey);
+        double z = num(tok.substr(at + 1));
+        if (!heights.empty() && !(z > heights.back()))
+          throw invalidParam("loft section heights must be strictly increasing.");
+        heights.push_back(z);
+        std::vector<double> xy;
+        for (auto& p : it->second) { xy.push_back(p.first); xy.push_back(p.second); }
+        owned.push_back(std::move(xy));
+        counts.push_back((int)it->second.size());
+      }
+      for (auto& v : owned) profPtrs.push_back(v.data());
+      std::string key = claimName("loft", name);
+      objects[key] = callShape("loft", [&](int* e) {
+        return ccgeom_loft(profPtrs.data(), counts.data(), heights.data(),
+                           (int)owned.size(), ruled, e);
+      });
+      result = "Created " + keyDisplay(key) + ".";
+      goto done;
+    }
+    if (cmd == "sweep") {
+      std::string name, prof;
+      std::vector<std::string> pathToks;
+      std::vector<std::string> before;
+      if (splitAs(args, cmd, name, before)) {
+        if (before.size() < 3) throw arity("sweep", "write: sweep <profile> <x,y,z> <x,y,z> [...] as <name>");
+        prof = before[0]; pathToks = tail(before, 1);
+      } else {
+        if (args.size() < 4) throw arity("sweep", "write: sweep <name> <profile> <x,y,z> <x,y,z> [...]");
+        name = args[0]; prof = args[1]; pathToks = tail(args, 2);
+      }
+      checkName(name);
+      std::string profKey = resolveProfileKey(prof);
+      auto it = profiles.find(profKey);
+      std::vector<double> path;
+      for (auto& tok : pathToks) {
+        auto pt = point(tok);
+        if (pt.size() != 3) throw parseError("Sweep path point '" + tok + "' must be 3D (x,y,z).");
+        path.insert(path.end(), pt.begin(), pt.end());
+      }
+      std::vector<double> xy;
+      for (auto& p : it->second) { xy.push_back(p.first); xy.push_back(p.second); }
+      std::string key = claimName("sweep", name);
+      objects[key] = callShape("sweep", [&](int* e) {
+        return ccgeom_sweep(xy.data(), (int)it->second.size(), path.data(),
+                            (int)pathToks.size(), e);
+      });
+      result = "Created " + keyDisplay(key) + ".";
+      goto done;
+    }
     // ---- booleans ------------------------------------------------------------------
     if (cmd == "union" || cmd == "fuse" || cmd == "cut" || cmd == "intersect" || cmd == "common") {
       std::string name; std::vector<std::string> before;
@@ -832,6 +945,25 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
       result = "Created " + keyDisplay(resultKey) + ".";
       goto done;
     }
+    if (cmd == "shell") {
+      std::string name, src, sizeTok;
+      std::vector<std::string> before;
+      if (splitAs(args, cmd, name, before)) {
+        if (before.size() != 2) throw arity("shell", "write: shell <src> <thickness> as <name>");
+        src = before[0]; sizeTok = before[1];
+      } else {
+        if (args.size() != 3) throw arity("shell", "write: shell <name> <src> <thickness>");
+        name = args[0]; src = args[1]; sizeTok = args[2];
+      }
+      checkName(name);
+      double thickness = num(sizeTok);
+      checkPositive("shell thickness", thickness);
+      CCGeomShape* s = object(src);
+      std::string key = claimName("shell", name);
+      objects[key] = callShape("shell", [&](int* e) { return ccgeom_shell(s, thickness, e); });
+      result = "Created " + keyDisplay(key) + ".";
+      goto done;
+    }
     // ---- transforms ----------------------------------------------------------------------
     if (cmd == "translate") {
       std::string name, src; std::vector<std::string> deltaToks;
@@ -890,6 +1022,124 @@ std::string CCSession::dispatch(const std::vector<std::string>& tokens) {
       std::string key = claimName("rotate", name);
       objects[key] = callShape("rotate", [&](int* e) { return ccgeom_transform(sh, m, e); });
       result = "Created " + keyDisplay(key) + ".";
+      goto done;
+    }
+    // ---- v0.4.0 batch 1: mirror / pattern (transform compositions) ----------------------
+    if (cmd == "mirror") {
+      std::string name, src, planeTok, offsetTok = "0";
+      std::vector<std::string> before;
+      if (splitAs(args, cmd, name, before)) {
+        if (before.size() != 2 && before.size() != 3)
+          throw arity("mirror", "write: mirror <src> <plane> [offset] as <name>");
+        src = before[0]; planeTok = before[1];
+        if (before.size() == 3) offsetTok = before[2];
+      } else {
+        if (args.size() != 3 && args.size() != 4)
+          throw arity("mirror", "write: mirror <name> <src> <plane> [offset] — plane is xy, xz or yz");
+        name = args[0]; src = args[1]; planeTok = args[2];
+        if (args.size() == 4) offsetTok = args[3];
+      }
+      checkName(name);
+      std::string plane = planeTok;
+      for (auto& ch : plane) ch = (char)std::tolower((unsigned char)ch);
+      int axis = plane == "yz" ? 0 : plane == "xz" ? 1 : plane == "xy" ? 2 : -1;
+      if (axis < 0)
+        throw invalidParam("mirror plane must be xy, xz or yz (the plane the part flips across).");
+      double offset = num(offsetTok);
+      double m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+      m[axis * 4 + axis] = -1.0;
+      m[axis * 4 + 3] = 2.0 * offset;
+      CCGeomShape* s = object(src);
+      std::string key = claimName("mirror", name);
+      objects[key] = callShape("mirror", [&](int* e) { return ccgeom_transform(s, m, e); });
+      result = "Created " + keyDisplay(key) + ".";
+      goto done;
+    }
+    if (cmd == "pattern") {
+      std::string name, src, kindTok;
+      std::vector<std::string> restToks;
+      std::vector<std::string> before;
+      if (splitAs(args, cmd, name, before)) {
+        if (before.size() < 3) throw arity("pattern", "write: pattern <src> linear <count> <dx> <dy> <dz> as <name> | pattern <src> circular <count> <angleDeg> [axis] as <name>");
+        src = before[0]; kindTok = before[1]; restToks = tail(before, 2);
+      } else {
+        if (args.size() < 4) throw arity("pattern", "write: pattern <name> <src> linear <count> <dx> <dy> <dz> | pattern <name> <src> circular <count> <angleDeg> [axis]");
+        name = args[0]; src = args[1]; kindTok = args[2]; restToks = tail(args, 3);
+      }
+      checkName(name);
+      std::string kind = kindTok;
+      for (auto& ch : kind) ch = (char)std::tolower((unsigned char)ch);
+      if (kind != "linear" && kind != "circular")
+        throw invalidParam("pattern kind must be 'linear' or 'circular'.");
+      if (restToks.empty()) throw arity("pattern", "pattern needs a copy count");
+      double countD = num(restToks[0]);
+      if (countD != std::llround(countD) || countD < 2 || countD > 10000)
+        throw invalidParam("pattern count must be a whole number >= 2.");
+      int count = (int)std::llround(countD);
+      CCGeomShape* srcShape = object(src);
+      // Copy k's matrix (identity for k = 0 — the source itself,
+      // cloned so the accumulator owns every handle it frees).
+      auto copyMatrix = [&](int k, double m[12]) {
+        for (int i = 0; i < 12; ++i) m[i] = 0;
+        m[0] = m[5] = m[10] = 1.0;
+        if (kind == "linear") {
+          if (restToks.size() != 4)
+            throw arity("pattern", "write: pattern <name> <src> linear <count> <dx> <dy> <dz>");
+          m[3] = k * num(restToks[1]);
+          m[7] = k * num(restToks[2]);
+          m[11] = k * num(restToks[3]);
+        } else {
+          if (restToks.size() != 2 && restToks.size() != 3)
+            throw arity("pattern", "write: pattern <name> <src> circular <count> <angleDeg> [axis x|y|z]");
+          double total = num(restToks[1]);
+          if (!(total > 0.0) || total > 360.0)
+            throw invalidParam("circular pattern angle must be in (0, 360].");
+          std::string ax = restToks.size() == 3 ? restToks[2] : "z";
+          for (auto& ch : ax) ch = (char)std::tolower((unsigned char)ch);
+          if (ax != "x" && ax != "y" && ax != "z")
+            throw invalidParam("circular pattern axis must be x, y or z.");
+          // A full 360 distributes count copies evenly (no copy
+          // duplicates the first); a partial span puts the first
+          // copy at 0 and the last exactly on the span.
+          double step = (total == 360.0) ? 360.0 / count : total / (count - 1);
+          double th = k * step * 3.14159265358979323846 / 180.0;
+          double c = std::cos(th), s = std::sin(th);
+          if (ax == "z") {
+            m[0] = c; m[1] = -s; m[4] = s; m[5] = c;
+          } else if (ax == "x") {
+            m[5] = c; m[6] = -s; m[9] = s; m[10] = c;
+          } else {
+            m[0] = c; m[2] = s; m[8] = -s; m[10] = c;
+          }
+        }
+      };
+      // Validate the argument shape BEFORE creating anything
+      // (copyMatrix throws the arity errors for k = 1 too).
+      { double probe[12]; copyMatrix(1, probe); }
+      CCGeomShape* acc = ccgeom_clone(srcShape);
+      if (!acc)
+        throw CCError(GEOMETRY_FAILED, "GEOMETRY_FAILED",
+                      std::string("pattern failed inside Open CASCADE: ") + ccgeom_last_error());
+      for (int k = 1; k < count; ++k) {
+        double m[12]; copyMatrix(k, m);
+        int e = 0;
+        CCGeomShape* copy = ccgeom_transform(srcShape, m, &e);
+        if (!copy) {
+          ccgeom_free(acc);
+          throw CCError(GEOMETRY_FAILED, "GEOMETRY_FAILED",
+                        std::string("pattern failed inside Open CASCADE: ") + ccgeom_last_error());
+        }
+        CCGeomShape* fused = ccgeom_unite(acc, copy, &e);
+        ccgeom_free(acc);
+        ccgeom_free(copy);
+        if (!fused)
+          throw CCError(GEOMETRY_FAILED, "GEOMETRY_FAILED",
+                        std::string("pattern failed inside Open CASCADE: ") + ccgeom_last_error());
+        acc = fused;
+      }
+      std::string key = claimName("pattern", name);
+      objects[key] = acc;
+      result = "Created " + keyDisplay(key) + " (" + std::to_string(count) + " copies).";
       goto done;
     }
     // ---- object management ------------------------------------------------------------------

@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 struct CCGeomShape {
   MCFacadeShape* h;
@@ -83,6 +84,48 @@ CCGeomShape* ccgeom_prism(const double* xy, int n, double dist, int* err) {
   static const double yAxis[3] = {0, 1, 0};
   static const double dir[3] = {0, 0, 1};
   int e = MC_OK; auto x = mc_prism(xy, n, origin, xAxis, yAxis, dir, dist, &e);
+  if (err) *err = xlate(e); return wrapH(x, err);
+}
+CCGeomShape* ccgeom_revolve(const double* xy, int n, double angleDeg, int* err) {
+  // Revolve about the Y axis: the profile's x is the radius, its
+  // y the height along the axis (façade plane = the XY plane,
+  // axis through the origin along +Y).
+  static const double origin[3] = {0, 0, 0};
+  static const double xAxis[3] = {1, 0, 0};
+  static const double yAxis[3] = {0, 1, 0};
+  static const double axisPoint[3] = {0, 0, 0};
+  static const double axisDir[3] = {0, 1, 0};
+  int e = MC_OK; auto x = mc_revolve(xy, n, origin, xAxis, yAxis,
+                                     axisPoint, axisDir, angleDeg, &e);
+  if (err) *err = xlate(e); return wrapH(x, err);
+}
+CCGeomShape* ccgeom_loft(const double* const* profiles, const int* counts,
+                         const double* heights, int profileCount,
+                         int ruled, int* err) {
+  // Every section lies in an XY-parallel plane at its height:
+  // origin (0,0,h), x axis (1,0,0), y axis (0,1,0).
+  std::vector<double> origins, xAxes, yAxes;
+  for (int i = 0; i < profileCount; ++i) {
+    origins.insert(origins.end(), {0.0, 0.0, heights[i]});
+    xAxes.insert(xAxes.end(), {1.0, 0.0, 0.0});
+    yAxes.insert(yAxes.end(), {0.0, 1.0, 0.0});
+  }
+  int e = MC_OK; auto x = mc_loft(profiles, counts, profileCount,
+                                  origins.data(), xAxes.data(),
+                                  yAxes.data(), ruled, &e);
+  if (err) *err = xlate(e); return wrapH(x, err);
+}
+CCGeomShape* ccgeom_sweep(const double* xy, int n,
+                          const double* pathPts, int pathCount, int* err) {
+  static const double origin[3] = {0, 0, 0};
+  static const double xAxis[3] = {1, 0, 0};
+  static const double yAxis[3] = {0, 1, 0};
+  int e = MC_OK; auto x = mc_sweep(xy, n, origin, xAxis, yAxis,
+                                   pathPts, pathCount, &e);
+  if (err) *err = xlate(e); return wrapH(x, err);
+}
+CCGeomShape* ccgeom_shell(CCGeomShape* s, double thickness, int* err) {
+  int e = MC_OK; auto x = mc_shell(raw(s), thickness, &e);
   if (err) *err = xlate(e); return wrapH(x, err);
 }
 CCGeomShape* ccgeom_unite(CCGeomShape* a, CCGeomShape* b, int* err) {

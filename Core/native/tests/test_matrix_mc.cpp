@@ -468,6 +468,94 @@ int main(int argc, char** argv) {
           "ns replay: volumes match the original session (incl. auto-suffixed box:p2)");
   }
 
+  // ---- v0.4.0 batch 1: revolve / loft / sweep / shell / mirror / pattern -----
+  {
+    Session i;
+    double vol = 0, area = 0, bb[6]; int f = 0, e = 0;
+    // revolve: rectangular profile (radius 10..14, height 0..6)
+    // about the Y axis = a tube: V = pi*(R^2-r^2)*h = 576*pi.
+    check(i.run("profile rp 10,0 14,0 14,6 10,6") == 0, "v4 revolve: profile rc 0");
+    check(i.run("revolve rv rp 360") == 0, "v4 revolve: rc 0");
+    check(near(i.volume("rv"), 576.0 * PI, 0.5), "v4 revolve: volume == pi*(14^2-10^2)*6 == 576pi");
+    check(near(i.volume("revolve:rv"), 576.0 * PI, 0.5), "v4 revolve: lands in the revolve/ directory");
+    check(cc_object_stats(i.s, "rv", &vol, &area, bb, &f, &e) == 0 &&
+          near(bb[0], -14, 1e-6) && near(bb[3], 14, 1e-6) &&
+          near(bb[1], 0, 1e-6) && near(bb[4], 6, 1e-6) &&
+          near(bb[2], -14, 1e-6) && near(bb[5], 14, 1e-6),
+          "v4 revolve: bbox is the full swept square cross-section");
+    check(i.run("revolve rv2 rp 180") == 0, "v4 revolve 180: rc 0");
+    check(near(i.volume("rv2"), 288.0 * PI, 0.5), "v4 revolve 180: volume == half the tube == 288pi");
+    // Profile touching the axis revolves to a plain cylinder.
+    check(i.run("profile rp2 0,0 10,0 10,5 0,5") == 0, "v4 revolve axis: profile rc 0");
+    check(i.run("revolve rv3 rp2 360") == 0, "v4 revolve axis: rc 0");
+    check(near(i.volume("rv3"), 500.0 * PI, 0.5), "v4 revolve axis: volume == pi*10^2*5 == 500pi");
+    check(i.run("profile rpn -5,0 5,0 5,5 -5,5") == 0, "v4 revolve neg: profile rc 0");
+    check(i.run("revolve bad rpn 360") != 0, "v4 revolve: a profile crossing the axis is rejected");
+
+    // loft: identical squares = a prism; a ruled taper = a frustum
+    // V = h/3*(A1 + A2 + sqrt(A1*A2)) = 10/3*(100+400+200).
+    check(i.run("profile sq 0,0 10,0 10,10 0,10") == 0, "v4 loft: profile rc 0");
+    check(i.run("profile sq2 0,0 20,0 20,20 0,20") == 0, "v4 loft: profile 2 rc 0");
+    check(i.run("loft lf sq@0 sq@10") == 0, "v4 loft: rc 0");
+    check(near(i.volume("lf"), 1000.0, 1e-3), "v4 loft: identical sections give the prism volume 1000");
+    check(i.run("loft tf sq@0 sq2@10 ruled") == 0, "v4 loft ruled: rc 0");
+    check(near(i.volume("tf"), 10.0 / 3.0 * 700.0, 0.5), "v4 loft ruled: taper volume == frustum 2333.33");
+    check(i.run("loft bad sq@10 sq@0") != 0, "v4 loft: decreasing heights are rejected");
+
+    // sweep: a 4x4 profile along a straight 30-long Z spine = the
+    // prism volume; a bent spine still builds a positive solid.
+    check(i.run("profile sq4 0,0 4,0 4,4 0,4") == 0, "v4 sweep: profile rc 0");
+    check(i.run("sweep sw sq4 0,0,0 0,0,30") == 0, "v4 sweep: rc 0");
+    check(near(i.volume("sw"), 480.0, 1e-3), "v4 sweep: straight-spine volume == 4*4*30 == 480");
+    check(cc_object_stats(i.s, "sw", &vol, &area, bb, &f, &e) == 0 &&
+          near(bb[0], 0, 1e-6) && near(bb[3], 4, 1e-6) && near(bb[5], 30, 1e-6),
+          "v4 sweep: bbox follows the spine");
+    check(i.run("sweep sw2 sq4 0,0,0 0,0,10 10,0,10") == 0, "v4 sweep bent: rc 0");
+    check(i.volume("sw2") > 100.0, "v4 sweep bent: positive volume");
+
+    // shell: a 20 mm box with 2 mm walls = 20^3 - 16^3 = 3904,
+    // outside dimensions unchanged, 6 outer + 6 inner faces.
+    check(i.run("box sh 20 20 20") == 0, "v4 shell: box rc 0");
+    check(i.run("shell shx sh 2") == 0, "v4 shell: rc 0");
+    check(near(i.volume("shx"), 3904.0, 1e-3), "v4 shell: volume == 8000 - 4096 == 3904");
+    check(cc_object_stats(i.s, "shx", &vol, &area, bb, &f, &e) == 0 &&
+          near(bb[0], 0, 1e-9) && near(bb[3], 20, 1e-9) && f == 12,
+          "v4 shell: outside bbox kept, 12 faces (6 outer + 6 inner)");
+    check(i.run("shell bad sh 15") != 0, "v4 shell: a too-thick wall is rejected");
+
+    // mirror: volume preserved, bbox flips across the plane.
+    check(i.run("box mb 10 10 10 at 5,0,0") == 0, "v4 mirror: box rc 0");
+    check(i.run("mirror mm mb yz") == 0, "v4 mirror: rc 0");
+    check(near(i.volume("mm"), 1000.0, 1e-6), "v4 mirror: volume preserved");
+    check(cc_object_stats(i.s, "mm", &vol, &area, bb, &f, &e) == 0 &&
+          near(bb[0], -15, 1e-9) && near(bb[3], -5, 1e-9),
+          "v4 mirror: bbox flips across the YZ plane");
+    check(i.run("mirror mm2 mb xy 10") == 0, "v4 mirror offset: rc 0");
+    check(cc_object_stats(i.s, "mm2", &vol, &area, bb, &f, &e) == 0 &&
+          near(bb[2], 10, 1e-9) && near(bb[5], 20, 1e-9),
+          "v4 mirror offset: bbox flips across the z=10 plane");
+
+    // pattern: linear copies fuse to N x volume with the last
+    // copy at (count-1) spacings; circular copies about the Z axis
+    // through the origin land at the compass points for 360/4.
+    check(i.run("box pb 10 10 10") == 0, "v4 pattern: box rc 0");
+    check(i.run("pattern pl pb linear 3 15 0 0") == 0, "v4 pattern linear: rc 0");
+    check(near(i.volume("pl"), 3000.0, 1e-6), "v4 pattern linear: volume == 3 copies");
+    check(cc_object_stats(i.s, "pl", &vol, &area, bb, &f, &e) == 0 &&
+          near(bb[0], 0, 1e-9) && near(bb[3], 40, 1e-9),
+          "v4 pattern linear: last copy sits at 2 spacings (bbox xmax 40)");
+    check(i.run("box cb 10 10 10 at 20,0,0") == 0, "v4 pattern circular: box rc 0");
+    check(i.run("pattern pc cb circular 4 360 z") == 0, "v4 pattern circular: rc 0");
+    check(near(i.volume("pc"), 4000.0, 1e-6), "v4 pattern circular: volume == 4 copies");
+    check(cc_object_stats(i.s, "pc", &vol, &area, bb, &f, &e) == 0 &&
+          near(bb[0], -30, 1e-6) && near(bb[3], 30, 1e-6) &&
+          near(bb[1], -30, 1e-6) && near(bb[4], 30, 1e-6),
+          "v4 pattern circular: copies land at 0/90/180/270 degrees");
+    check(i.run("pattern pc2 cb circular 3 90 z") == 0, "v4 pattern partial: rc 0");
+    check(near(i.volume("pc2"), 3000.0, 1e-3), "v4 pattern partial: 3 copies at 0/45/90 degrees, volume == 3000");
+    check(i.run("pattern bad pb linear 1 15 0 0") != 0, "v4 pattern: count < 2 is rejected");
+  }
+
   // ---- demo script (full pipeline) ------------------------------------------
   if (demoPath) {
     std::printf("== demo script ==\n");

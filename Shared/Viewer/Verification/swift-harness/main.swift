@@ -632,6 +632,76 @@ if CommandLine.arguments.count > 2 {
     check(StepLineBuilder.line(for: badStep, resultDisplayName: "b") == nil,
           "line builder: a non-numeric parameter fails the build instead of emitting a bad line")
 
+    // v0.4.0 command expansion: StepLineBuilder emission for the
+    // six new step commands + catalog presence + ReplayBuilder
+    // naming in the new directories.
+    let profStep = ModelStep(command: "profile",
+                             params: ["points": "10,0 14,0 14,6 10,6"], name: "tube")
+    let revStep = ModelStep(command: "revolve",
+                            params: ["profile": "profile:tube", "angle": "360"], name: "rv")
+    check(StepLineBuilder.line(for: revStep, resultDisplayName: "rv") ==
+          "revolve rv profile:tube 360",
+          "line builder: revolve emits profile + angle")
+    let loftStep = ModelStep(command: "loft",
+                             params: ["profileA": "profile:a", "zA": "0",
+                                      "profileB": "profile:b", "zB": "10",
+                                      "profileC": "", "zC": "20", "style": "ruled"], name: "lf")
+    check(StepLineBuilder.line(for: loftStep, resultDisplayName: "lf") ==
+          "loft lf profile:a@0 profile:b@10 ruled",
+          "line builder: loft emits sections@heights, optional C omitted, ruled kept")
+    let loftStepC = ModelStep(command: "loft",
+                              params: ["profileA": "profile:a", "zA": "0",
+                                       "profileB": "profile:b", "zB": "10",
+                                       "profileC": "profile:c", "zC": "25", "style": "smooth"], name: "lf")
+    check(StepLineBuilder.line(for: loftStepC, resultDisplayName: "lf") ==
+          "loft lf profile:a@0 profile:b@10 profile:c@25",
+          "line builder: loft with a third section, smooth emits no style token")
+    let sweepStep = ModelStep(command: "sweep",
+                              params: ["profile": "profile:sq", "path": "0,0,0  0,0,30"], name: "sw")
+    check(StepLineBuilder.line(for: sweepStep, resultDisplayName: "sw") ==
+          "sweep sw profile:sq 0,0,0 0,0,30",
+          "line builder: sweep normalises the path point list")
+    let shellStep = ModelStep(command: "shell",
+                              params: ["source": "box:b", "thickness": "2"], name: "sh")
+    check(StepLineBuilder.line(for: shellStep, resultDisplayName: "sh") ==
+          "shell sh box:b 2",
+          "line builder: shell emits source + thickness")
+    let mirrorStep = ModelStep(command: "mirror",
+                               params: ["source": "box:b", "plane": "YZ", "offset": "0"], name: "mi")
+    check(StepLineBuilder.line(for: mirrorStep, resultDisplayName: "mi") ==
+          "mirror mi box:b yz 0",
+          "line builder: mirror lowercases the plane token")
+    let badMirror = ModelStep(command: "mirror",
+                              params: ["source": "box:b", "plane": "ab", "offset": "0"], name: "mi")
+    check(StepLineBuilder.line(for: badMirror, resultDisplayName: "mi") == nil,
+          "line builder: mirror with an unknown plane fails the build")
+    let patLin = ModelStep(command: "pattern",
+                           params: ["source": "box:b", "kind": "linear", "count": "3",
+                                    "dx": "15", "dy": "0", "dz": "0",
+                                    "angle": "360", "axis": "z"], name: "pt")
+    check(StepLineBuilder.line(for: patLin, resultDisplayName: "pt") ==
+          "pattern pt box:b linear 3 15 0 0",
+          "line builder: linear pattern emits count + step vector")
+    let patCirc = ModelStep(command: "pattern",
+                            params: ["source": "box:b", "kind": "circular", "count": "4",
+                                     "dx": "15", "dy": "0", "dz": "0",
+                                     "angle": "360", "axis": "z"], name: "pt")
+    check(StepLineBuilder.line(for: patCirc, resultDisplayName: "pt") ==
+          "pattern pt box:b circular 4 360 z",
+          "line builder: circular pattern emits count + total angle + axis")
+    check(CommandCatalog.spec(for: "revolve") != nil &&
+          CommandCatalog.spec(for: "loft") != nil &&
+          CommandCatalog.spec(for: "sweep") != nil &&
+          CommandCatalog.spec(for: "shell") != nil &&
+          CommandCatalog.spec(for: "mirror") != nil &&
+          CommandCatalog.spec(for: "pattern") != nil &&
+          CommandCatalog.all.count == 21,
+          "specs: the six v0.4.0 commands are in the panel catalog (21 total)")
+    let v4Built = ReplayBuilder.build(steps: [profStep, revStep])
+    check(v4Built.count == 2 && v4Built[1].predictedName == "revolve:rv" &&
+          v4Built[1].line == "revolve rv profile:tube 360",
+          "replay builder: revolve step predicts revolve:rv with the emitted line")
+
     // ProjectFile: Codable round-trip with steps, folders, viewer.
     var project = ProjectFile()
     project.steps = nsSteps

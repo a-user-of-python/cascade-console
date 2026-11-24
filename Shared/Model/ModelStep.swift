@@ -162,6 +162,47 @@ public enum StepLineBuilder {
                 line += " about \(bx),\(by),\(bz)"
             }
             return line
+        case "revolve":
+            guard let prof = ref("profile"), let angle = num("angle") else { return nil }
+            return "revolve \(name) \(prof) \(angle)"
+        case "loft":
+            guard let pa = ref("profileA"), let za = num("zA"),
+                  let pb = ref("profileB"), let zb = num("zB") else { return nil }
+            var line = "loft \(name) \(pa)@\(za) \(pb)@\(zb)"
+            if let pc = ref("profileC"), let zc = num("zC") {
+                line += " \(pc)@\(zc)"
+            }
+            if (p["style"] ?? "").trimmingCharacters(in: .whitespaces).lowercased() == "ruled" {
+                line += " ruled"
+            }
+            return line
+        case "sweep":
+            guard let prof = ref("profile") else { return nil }
+            let path = (p["path"] ?? "")
+                .split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" })
+                .joined(separator: " ")
+            guard !path.isEmpty else { return nil }
+            return "sweep \(name) \(prof) \(path)"
+        case "shell":
+            guard let src = ref("source"), let t = num("thickness") else { return nil }
+            return "shell \(name) \(src) \(t)"
+        case "mirror":
+            guard let src = ref("source"), let off = num("offset") else { return nil }
+            let plane = (p["plane"] ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+            guard plane == "xy" || plane == "xz" || plane == "yz" else { return nil }
+            return "mirror \(name) \(src) \(plane) \(off)"
+        case "pattern":
+            guard let src = ref("source"), let count = num("count") else { return nil }
+            let kind = (p["kind"] ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+            if kind == "circular" {
+                guard let angle = num("angle") else { return nil }
+                let axis = (p["axis"] ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+                guard axis == "x" || axis == "y" || axis == "z" else { return nil }
+                return "pattern \(name) \(src) circular \(count) \(angle) \(axis)"
+            }
+            guard kind == "linear", let dx = num("dx"), let dy = num("dy"),
+                  let dz = num("dz") else { return nil }
+            return "pattern \(name) \(src) linear \(count) \(dx) \(dy) \(dz)"
         case "copy":
             guard let src = ref("source") else { return nil }
             return "copy \(name) \(src)"
