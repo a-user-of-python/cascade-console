@@ -19,6 +19,12 @@ on:
     paths:
       - "Core/native/**"
       - "Shared/Engine/**"
+      # The Swift viewer harness (job 3) compiles the production
+      # viewer-feed sources; changes there must retrigger it
+      # (v0.2.3: a Shared/Viewer-only change previously would not
+      # have run the very gate built to protect those files).
+      - "Shared/Viewer/**"
+      - "Shared/Models/**"
       - ".github/workflows/build-native-engine.yml"
 
 jobs:
