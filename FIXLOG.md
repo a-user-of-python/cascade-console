@@ -576,4 +576,16 @@ backgrounded four times with sample-project.cascade as the current
 file (e.g. while taking/sharing screenshots); each backgrounding
 re-saves the same buffer, harmlessly. No code change.
 
+CI on the v0.2.1 commit (2f9708b2): Host tests SUCCESS (run 45312784599);
+Build Mac app SUCCESS (45312784548); Build iPad IPA SUCCESS (45312784644,
+symbol gate green); Native engine SUCCESS (45312784652) — the new
+mc-backend-matrix job reports "RESULT: 18 pass, 0 fail (mc view-data
+smoke)" and "RESULT: 117 pass, 0 fail (mc per-command matrix)", with the
+sim cantilever at 0.193548 mm coarse / 0.198820 mm fine through cc_execute
+on the mc backend, identical to the local proof run. The IPA artifact was
+downloaded and verified by hand: bundle com.user.cascadeconsole, version
+0.2.1 (3), cc_execute / cc_session_create / mc_clone_shape / mc_export_stl
+present, catalog.json + default.metallib + both OCCT licence texts
+bundled; 9,156,944 bytes, md5 6e2ad5969d73d94ec76d91eca4edead3.
+
 Version: MARKETING_VERSION 0.2.1, CURRENT_PROJECT_VERSION 3.
