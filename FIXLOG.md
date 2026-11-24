@@ -1060,3 +1060,31 @@ is the honest limit of the migration.
   rules. The CCFX fixture's object names are now qualified
   (box:test / cylinder:cyl) and the harness's name-keyed checks
   were updated to match.
+
+### v0.3.0 CI results (final, commit 7589cda4)
+
+All four workflows SUCCESS on the v0.3.0 commit (dispatched batch:
+Native engine 45450331558, Build iPad IPA 45450321954, Build Mac
+app 45450327497, Host tests 45450335983; the push-triggered
+duplicates also completed SUCCESS). Native engine job: "RESULT:
+151 pass, 0 fail (mc per-command matrix)" (125 v0.2.4 baseline +
+26 namespace/replay cases), "RESULT: 35 pass, 0 fail (mc view-data
+smoke)", "RESULT: 111 pass, 0 fail (swift viewer harness)" (53
+baseline + 58 new: the production ReplayBuilder reproduces the mc
+backend's 10-step fixture lines, predicted names and grouping
+exactly; CascadeNames parity; project round-trip; migration;
+folder rules), engine host suites 153 pass OCCT / 129 pass + 5
+skip mock, sim 35/35 both backends. Host tests: prototype 47/47,
+tessellation contract, projection guard — all green. The IPA
+artifact was downloaded and verified by hand: bundle
+com.user.cascadeconsole, version 0.3.0 (7), _cc_execute /
+_cc_session_create / _mc_clone_shape / _mc_export_stl /
+_cc_profile_count present, catalog.json + default.metallib + both
+OCCT licence texts bundled, UIFileSharingEnabled = true and
+LSSupportsOpeningDocumentsInPlace = true. 9,382,495 bytes, md5
+ab80d6b0219999520b63f4fd81321ae1. Device verdict is the final
+judge: the app should open on the Build UI (Parts/History/
+Properties left, viewport centre, command panel right); a box and
+a cut can both be named "part"; editing a History step rebuilds
+the model; Save Project writes a .cascadeproj that reopens with
+history and folders intact.
