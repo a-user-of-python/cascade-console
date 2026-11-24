@@ -26,7 +26,7 @@ OCCT_LIB="$OCCT_PREFIX/lib"
 echo "OCCT prefix: $OCCT_PREFIX"
 grep -m1 "OCC_VERSION_COMPLETE " "$OCCT_INC/Standard_Version.hxx" || true
 
-TK_LIBS="-lTKPrim -lTKBO -lTKBool -lTKFillet -lTKMesh -lTKTopAlgo -lTKGeomAlgo -lTKShHealing -lTKBRep -lTKGeomBase -lTKG3d -lTKG2d -lTKMath -lTKernel -lTKSTEP -lTKXSBase -lTKSTL"
+TK_LIBS="-lTKOffset -lTKPrim -lTKBO -lTKBool -lTKFillet -lTKMesh -lTKTopAlgo -lTKGeomAlgo -lTKShHealing -lTKBRep -lTKGeomBase -lTKG3d -lTKG2d -lTKMath -lTKernel -lTKSTEP -lTKXSBase -lTKSTL"
 # 8.0.1 renamed some STEP toolkits (TKDESTEP/TKDE); tolerate either set.
 # Detection searches the multiarch lib dirs too (Ubuntu puts them in
 # /usr/lib/x86_64-linux-gnu, not $OCCT_PREFIX/lib).
@@ -36,7 +36,7 @@ for d in "$OCCT_LIB" "$OCCT_PREFIX/lib/x86_64-linux-gnu"; do
   [ -e "$d/libTKDESTEP.so" ] && HAS_DESTEP=1
 done
 if [ "$HAS_STEP" = 0 ] && [ "$HAS_DESTEP" = 1 ]; then
-  TK_LIBS="-lTKPrim -lTKBO -lTKBool -lTKFillet -lTKMesh -lTKTopAlgo -lTKGeomAlgo -lTKShHealing -lTKBRep -lTKGeomBase -lTKG3d -lTKG2d -lTKMath -lTKernel -lTKDESTEP -lTKDE -lTKXSBase -lTKDESTL"
+  TK_LIBS="-lTKOffset -lTKPrim -lTKBO -lTKBool -lTKFillet -lTKMesh -lTKTopAlgo -lTKGeomAlgo -lTKShHealing -lTKBRep -lTKGeomBase -lTKG3d -lTKG2d -lTKMath -lTKernel -lTKDESTEP -lTKDE -lTKXSBase -lTKDESTL"
 fi
 
 echo "== mock backend =="

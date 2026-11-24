@@ -34,10 +34,10 @@ public enum CascadeNames {
     /// Canonical directory order for display (creation-command order).
     public static let directoryOrder: [String] = [
         "box", "cylinder", "sphere", "cone", "torus",
-        "profile", "extrude",
+        "profile", "extrude", "revolve", "loft", "sweep",
         "union", "cut", "intersect",
-        "fillet", "chamfer",
-        "translate", "rotate", "copy",
+        "fillet", "chamfer", "shell",
+        "translate", "rotate", "copy", "mirror", "pattern",
     ]
 
     public static func isQualified(_ name: String) -> Bool {

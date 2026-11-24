@@ -39,7 +39,7 @@ OCCT_LIB=$OCCT_PREFIX/lib
 [ -d "$OCCT_LIB" ] || OCCT_LIB=/usr/lib64
 echo "OCCT prefix: $OCCT_PREFIX (include: $OCCT_INC)"
 
-OCCT_LIBS="-lTKPrim -lTKBO -lTKBool -lTKFillet -lTKMesh -lTKTopAlgo \
+OCCT_LIBS="-lTKOffset -lTKPrim -lTKBO -lTKBool -lTKFillet -lTKMesh -lTKTopAlgo \
 -lTKGeomAlgo -lTKShHealing -lTKBRep -lTKGeomBase -lTKG3d -lTKG2d \
 -lTKMath -lTKernel"
 HAS_DESTEP=0

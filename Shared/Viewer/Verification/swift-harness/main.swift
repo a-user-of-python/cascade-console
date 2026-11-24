@@ -593,8 +593,8 @@ if CommandLine.arguments.count > 2 {
 
     // CommandSpecs sanity: the UI list is exactly the implemented
     // step commands, every one in a known directory + group.
-    check(CommandCatalog.all.count == 15,
-          "specs: 15 UI step commands (got \(CommandCatalog.all.count))")
+    check(CommandCatalog.all.count == 21,
+          "specs: 21 UI step commands (got \(CommandCatalog.all.count))")
     check(CommandCatalog.all.allSatisfy { CascadeNames.directoryOrder.contains($0.directory) },
           "specs: every command's directory is a known name directory")
     check(CommandCatalog.all.allSatisfy { CommandCatalog.groupOrder.contains($0.group) },
