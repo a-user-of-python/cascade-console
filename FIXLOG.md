@@ -446,3 +446,24 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   engine-library step compiled all five objects but its `ar` line
   still archived only cc_interpreter.o + ccgeom_mc.o (the line
   predated the sim integration). All five objects are now archived.
+
+## v0.2 CI results (final, commit 54bea331)
+- Host tests: SUCCESS (run 45287892575).
+- Build Mac app: SUCCESS (run 45287892732) — stub engine, see README.
+- Native engine: SUCCESS on 1d11645f (run 45276454683; engine 90
+  mock / 100 OCCT, sim 35/35 both backends, in CI); a confirmation
+  run on final HEAD was dispatched (4529…, see Actions).
+- Build iPad IPA: SUCCESS (run 45287892716). Gate step output from
+  the shipped executable's symbol table:
+    0000000100cfe168 T _cc_execute
+    0000000100cfe09c T _cc_session_create
+    0000000100615c68 T _mc_clone_shape
+    0000000100615d58 T _mc_export_stl
+  plus catalog.json + default.metallib + both OCCT licences present.
+- Delivered artifact: CascadeConsole v0.2.ipa, 9,147,334 bytes,
+  md5 68175fd6d2940aa3527f66f6427dbceb; bundle com.user.cascadeconsole
+  0.2 (2), verified independently from the downloaded IPA.
+- Known CI wart: the CascadeKit cache only saves when the whole IPA
+  job succeeds, so fix-loop iterations each paid the ~55-70 min kit
+  build. Splitting the kit into its own workflow would fix that;
+  left as-is for v0.2.
