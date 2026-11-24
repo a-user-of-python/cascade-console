@@ -660,3 +660,20 @@ The user's iPad test of v0.2.1 reported two defects:
    silently regress again.
 
 Version: MARKETING_VERSION 0.2.2, CURRENT_PROJECT_VERSION 4.
+
+CI on the v0.2.2 commit (d5686c9b): all four workflows SUCCESS —
+Host tests (run 45385218536, incl. the new projection guard and the
+tessellation contract); Build Mac app (45385218378); Build iPad IPA
+(45385218663, symbol gate + new file-sharing PlistBuddy gate green);
+Native engine (45385218404) — mc-backend matrix job reports
+"RESULT: 117 pass, 0 fail (mc per-command matrix)" and
+"RESULT: 26 pass, 0 fail (mc view-data smoke)" (18 + 8 new
+orientation checks), engine host suites 112 pass OCCT / 94 pass
+mock with the same orientation invariants. The IPA artifact was
+downloaded and verified by hand: bundle com.user.cascadeconsole,
+version 0.2.2 (4), cc_execute / cc_session_create / mc_clone_shape /
+mc_export_stl present, catalog.json + default.metallib + both OCCT
+licence texts bundled, and — the file-sharing fix proven in the
+shipped binary — Info.plist carries UIFileSharingEnabled = true
+and LSSupportsOpeningDocumentsInPlace = true. 9,156,298 bytes,
+md5 0dc9dbfdbcde23e249dc0007fceec63c.
