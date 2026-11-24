@@ -1,0 +1,29 @@
+Cascade Console for Mac — install & first launch
+==================================================
+
+This build is UNIVERSAL: it runs natively on Intel Macs and on
+Apple-silicon Macs. It needs macOS 14 or newer.
+
+1. Drag CascadeConsole.app into your Applications folder
+   (or just run it from this folder).
+
+2. First launch: the app is ad-hoc signed (built on GitHub's free
+   runners, not notarized by Apple), so Gatekeeper asks once:
+   - Right-click (or Control-click) the app and choose "Open",
+     then click "Open" in the dialog.
+   - On macOS 15 and later, if the dialog has no "Open" button:
+     open System Settings -> Privacy & Security, scroll down to
+     the Security section, and click "Open Anyway" for
+     Cascade Console. Then launch it again.
+   You only have to do this once.
+
+3. Your files: the app keeps its scripts, exports (.step/.stl)
+   and projects (.cascadeproj) in its Documents folder — open the
+   Files panel inside the app. macOS may ask permission for the
+   app to access Documents; allow it so saves and exports work.
+
+What you get: the full app — the native Open CASCADE engine (not
+a demo/stub), the Metal 3D viewer, the command panel with
+sliders, the parametric history, the part tree with folders and
+name directories, and the text console for scripts, exports and
+simulation. Same app as the iPad build, same sources.

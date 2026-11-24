@@ -195,16 +195,15 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
     /// Face-number labels (v0.2): when on, each face of each visible
     /// object gets a text chip at its centroid showing its census
     /// face index (MeshObject.faceGroups' sourceFaceIndex — the same
-    /// number @face <n> accepts). Default off. Overlay rendering is
-    /// iOS-only for now (see updateFaceLabels); the flag and command
-    /// work on both platforms.
+    /// number @face <n> accepts). Default off. Overlay rendering
+    /// runs on both platforms since v0.3.1 (see updateFaceLabels).
     public var faceLabelsEnabled: Bool = false
 
     /// Edge-number labels (v0.2.4): when on, each census edge of each
     /// visible object gets a text chip at its midpoint showing its
     /// census edge index (MeshObject.edges' edgeIndex — the same
     /// number `fillet/chamfer ... edges i,j,...` accepts). Default
-    /// off. Same iOS-only overlay note as face labels.
+    /// off. Same both-platform overlay as face labels (v0.3.1).
     public var edgeLabelsEnabled: Bool = false
 
     public var objectIDs: [String] { store.order }
@@ -552,12 +551,54 @@ extension CascadeRenderer: MTKViewDelegate {
 // Contrast per the user's vision needs: near-black text on a solid
 // near-white chip, 14 pt semibold — never small grey text.
 //
-// iOS only in this pass: on macOS the flag/command exist but no chips
-// are drawn (the Mac app does not use this renderer yet — see FIXLOG).
+// macOS port (v0.3.1): the chips were iOS-only through v0.3.0. The
+// port is deliberately small — CATextLayer exists on both platforms;
+// the only UIKit surface was the font, the colours, the contents
+// scale and the layer origin. Those four are shimmed below
+// (ChipFont / ChipColor / chipContentsScale / chipFrame). Chip
+// centres are produced in the bridge's top-left-origin screen
+// convention; UIKit layers share that origin, AppKit layers are
+// bottom-left, so chipFrame flips exactly once on macOS — the same
+// flip-once convention CascadeMetalView applies to picking.
 
-#if os(iOS)
+#if os(iOS) || os(macOS)
 import QuartzCore
+#if os(iOS)
 import UIKit
+private typealias ChipFont = UIFont
+private typealias ChipColor = UIColor
+#else
+import AppKit
+private typealias ChipFont = NSFont
+private typealias ChipColor = NSColor
+#endif
+
+/// The layer the chips are hosted on. UIKit's is non-optional;
+/// AppKit's is an Optional (an MTKView always has its CAMetalLayer
+/// in practice, but the port does not force-unwrap it).
+private func chipHostLayer(_ view: MTKView) -> CALayer? {
+    view.layer
+}
+
+/// Contents scale for text chips: UIKit exposes it on the view;
+/// AppKit takes it from the window's backing scale factor.
+private func chipContentsScale(_ view: MTKView) -> CGFloat {
+    #if os(iOS)
+    view.contentScaleFactor
+    #else
+    view.window?.backingScaleFactor ?? 2.0
+    #endif
+}
+
+/// Frame for a chip centred on `center` (22 pt tall), flipping the
+/// y axis once on macOS (see the section note above).
+private func chipFrame(center: CGPoint, width: CGFloat, viewHeight: CGFloat) -> CGRect {
+    #if os(iOS)
+    CGRect(x: center.x - width / 2, y: center.y - 11, width: width, height: 22)
+    #else
+    CGRect(x: center.x - width / 2, y: viewHeight - center.y - 11, width: width, height: 22)
+    #endif
+}
 
 private var faceLabelStorage: [ObjectIdentifier: [String: CATextLayer]] = [:]
 
@@ -576,7 +617,7 @@ extension CascadeRenderer {
         }
         let bounds = view.bounds
         guard bounds.width > 0, bounds.height > 0 else { return }
-        let host = view.layer
+        guard let host = chipHostLayer(view) else { return }
         let eye = store.camera.eyePosition
         var wanted: [String: (text: String, screen: CGPoint)] = [:]
 
@@ -618,13 +659,13 @@ extension CascadeRenderer {
             layer.removeFromSuperlayer()
             layers[key] = nil
         }
-        let font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        let font = ChipFont.systemFont(ofSize: 14, weight: .semibold)
         for (key, item) in wanted {
             let layer = layers[key] ?? {
                 let l = CATextLayer()
                 l.alignmentMode = .center
                 l.cornerRadius = 4
-                l.contentsScale = view.contentScaleFactor
+                l.contentsScale = chipContentsScale(view)
                 host.addSublayer(l)
                 layers[key] = l
                 return l
@@ -632,12 +673,12 @@ extension CascadeRenderer {
             layer.string = item.text
             layer.font = font
             layer.fontSize = 14
-            layer.foregroundColor = UIColor.black.cgColor
-            layer.backgroundColor = UIColor.white.withAlphaComponent(0.92).cgColor
+            layer.foregroundColor = ChipColor.black.cgColor
+            layer.backgroundColor = ChipColor.white.withAlphaComponent(0.92).cgColor
             let width = max(22, 12 + 9 * item.text.count)
-            layer.frame = CGRect(x: item.screen.x - CGFloat(width) / 2,
-                                 y: item.screen.y - 11,
-                                 width: CGFloat(width), height: 22)
+            layer.frame = chipFrame(center: item.screen,
+                                    width: CGFloat(width),
+                                    viewHeight: bounds.height)
         }
         labelLayers = layers
     }
@@ -670,7 +711,7 @@ extension CascadeRenderer {
         var layers = edgeLabelLayers
         let bounds = view.bounds
         guard bounds.width > 0, bounds.height > 0 else { return }
-        let host = view.layer
+        guard let host = chipHostLayer(view) else { return }
         let eye = store.camera.eyePosition
         var wanted: [String: (text: String, screen: CGPoint, bg: CGColor)] = [:]
 
@@ -697,7 +738,7 @@ extension CascadeRenderer {
                     guard let screen = project(anchor) else { continue }
                     wanted["\(id)#e\(edge.edgeIndex)"] =
                         (text: "\(edge.edgeIndex)", screen: screen,
-                         bg: UIColor.white.withAlphaComponent(0.92).cgColor)
+                         bg: ChipColor.white.withAlphaComponent(0.92).cgColor)
                 }
             }
         }
@@ -709,7 +750,7 @@ extension CascadeRenderer {
                 let c = tipInfo.color
                 wanted["axis:\(tipInfo.label)"] =
                     (text: tipInfo.label, screen: screen,
-                     bg: UIColor(red: CGFloat(c.x), green: CGFloat(c.y),
+                     bg: ChipColor(red: CGFloat(c.x), green: CGFloat(c.y),
                                  blue: CGFloat(c.z), alpha: 0.95).cgColor)
             }
         }
@@ -718,13 +759,13 @@ extension CascadeRenderer {
             layer.removeFromSuperlayer()
             layers[key] = nil
         }
-        let font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        let font = ChipFont.systemFont(ofSize: 14, weight: .semibold)
         for (key, item) in wanted {
             let layer = layers[key] ?? {
                 let l = CATextLayer()
                 l.alignmentMode = .center
                 l.cornerRadius = 4
-                l.contentsScale = view.contentScaleFactor
+                l.contentsScale = chipContentsScale(view)
                 host.addSublayer(l)
                 layers[key] = l
                 return l
@@ -732,12 +773,12 @@ extension CascadeRenderer {
             layer.string = item.text
             layer.font = font
             layer.fontSize = 14
-            layer.foregroundColor = UIColor.black.cgColor
+            layer.foregroundColor = ChipColor.black.cgColor
             layer.backgroundColor = item.bg
             let width = max(22, 12 + 9 * item.text.count)
-            layer.frame = CGRect(x: item.screen.x - CGFloat(width) / 2,
-                                 y: item.screen.y - 11,
-                                 width: CGFloat(width), height: 22)
+            layer.frame = chipFrame(center: item.screen,
+                                    width: CGFloat(width),
+                                    viewHeight: bounds.height)
         }
         edgeLabelLayers = layers
     }

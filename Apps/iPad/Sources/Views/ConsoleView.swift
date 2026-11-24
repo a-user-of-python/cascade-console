@@ -79,7 +79,7 @@ struct ConsoleView: View {
 
             TextField("Command — try: help", text: $draft)
                 .font(.callout.monospaced())
-                .textInputAutocapitalization(.never)
+                .noAutocapitalization()
                 .autocorrectionDisabled(true)
                 .focused($inputFocused)
                 .onSubmit { submit() }

@@ -1,41 +1,432 @@
 name: Build Mac app
 
-# Unsigned Mac build on a STANDARD free runner only (macos-26).
-# The Mac app is a SwiftPM executable target (Apps/Mac/Package.swift,
-# target CascadeConsoleMac, sources in Apps/Mac/CascadeConsoleMac/).
-# The package is intentionally standalone: it does NOT depend on
-# Shared/ yet (see the header of Package.swift for the explicit
-# resolution and the duplicate-type collisions that decision avoids).
-# It type-checks and links the scaffold against its stub engine; it
-# does NOT link OCCT (see INTEGRATION-NOTES.md, "What remains").
-# Any build failure fails this job — nothing here masks errors.
+# Real Mac build on STANDARD free runners only (macos-26 + the
+# standard Intel image). v0.3.1 replaces the retired SwiftPM stub
+# scaffold: this workflow builds the actual app —
+#   1. Fetch a-user-of-python/cascade-ios at the pinned commit
+#      (the cascade-port OCCT 8.0.1 subset + mc_* facade =
+#      CascadeKit). CI fetch, NOT vendoring/submodule.
+#   2. Inject mc_clone_shape + mc_export_stl into the CHECKOUT's
+#      facade (Core/native/ci/patch_cascade_port.py; cascade-ios
+#      itself and all OCCT sources stay unmodified — LGPL).
+#   3. Build CascadeKit for macOS arm64 AND x86_64 by direct clang
+#      cross-compilation, lipo'd into one universal library; the
+#      Layer-2 engine (cc_interpreter + ccgeom_mc + sim) likewise.
+#   4. Build Apps/Mac/CascadeConsoleMac.xcodeproj — the SAME
+#      sources as the iPad app — universal, with
+#      CASCADE_NATIVE_ENGINE defined and both universal libraries
+#      on the link line, so EngineFactory returns NativeEngine.
+#   5. GATE on the shipped .app: BOTH architectures in the
+#      executable, the native-engine symbols in BOTH slices,
+#      catalog.json + default.metallib + both OCCT licence texts
+#      bundled, version as expected. A build that silently fell
+#      back to the stub fails here.
+#   6. Ad-hoc sign the .app (opens with right-click -> Open; see
+#      Apps/Mac/INSTALL.txt) and package the zip.
+# Two more jobs EXECUTE the x86_64 engine — the Intel slice is
+# never shipped unexecuted: the per-command matrix + view-data
+# smoke built for x86_64 and run under Rosetta 2 (job 2), and the
+# same matrix built and run natively on an Intel runner (job 3).
 
 on:
   workflow_dispatch:
   push:
 
+env:
+  CASCADE_IOS_SHA: 061875afb5384227db5f39cba81266cf889257a4
+
 jobs:
   build:
-    name: Cascade Console Mac (SwiftPM, unsigned)
+    name: Cascade Console Mac (universal, native engine)
     runs-on: macos-26
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
-      - name: Build Mac scaffold
+
+      - name: Fetch cascade-port (CascadeKit) at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: a-user-of-python/cascade-ios
+          ref: ${{ env.CASCADE_IOS_SHA }}
+          path: cascade-port-src
+
+      - name: Inject mc_additions into the cascade-port checkout
+        run: python3 Core/native/ci/patch_cascade_port.py cascade-port-src
+
+      - name: Verify project and scheme exist
         run: |
-          cd Apps/Mac
-          swift build -c release
-          test -x .build/release/CascadeConsoleMac
-          ls -lh .build/release/CascadeConsoleMac
-      - name: Package app folder
+          test -f Apps/Mac/CascadeConsoleMac.xcodeproj/project.pbxproj
+          test -f Apps/Mac/CascadeConsoleMac.xcodeproj/xcshareddata/xcschemes/CascadeConsoleMac.xcscheme
+          test -f Shared/Resources/catalog.json
+          xcodebuild -list -project Apps/Mac/CascadeConsoleMac.xcodeproj
+
+      - name: Restore cached CascadeKit (macOS arm64)
+        id: kitcache-arm64
+        uses: actions/cache@v4
+        with:
+          path: build/kitlib-mac-arm64
+          key: cascadekit-mac-arm64-${{ env.CASCADE_IOS_SHA }}-${{ hashFiles('Core/native/ci/patch_cascade_port.py') }}-v1
+
+      - name: Restore cached CascadeKit (macOS x86_64)
+        id: kitcache-x86_64
+        uses: actions/cache@v4
+        with:
+          path: build/kitlib-mac-x86_64
+          key: cascadekit-mac-x86_64-${{ env.CASCADE_IOS_SHA }}-${{ hashFiles('Core/native/ci/patch_cascade_port.py') }}-v1
+
+      - name: Build CascadeKit for macOS arm64 (direct clang)
+        if: steps.kitcache-arm64.outputs.cache-hit != 'true'
         run: |
-          rm -rf CascadeConsoleMac-unsigned
-          mkdir -p CascadeConsoleMac-unsigned
-          cp Apps/Mac/.build/release/CascadeConsoleMac CascadeConsoleMac-unsigned/
-          cp README.md CascadeConsoleMac-unsigned/
-          zip -qry CascadeConsoleMac-unsigned.zip CascadeConsoleMac-unsigned
-          ls -lh CascadeConsoleMac-unsigned.zip
+          set -euo pipefail
+          # Same sources/defines/includes as the iPad kit build in
+          # build-ipa.yml, targeted at macOS instead of iphoneos.
+          SDK="$(xcrun --sdk macosx --show-sdk-path)"
+          cd "$GITHUB_WORKSPACE/cascade-port-src"
+          mkdir -p "$GITHUB_WORKSPACE/build/kitobj-mac-arm64" "$GITHUB_WORKSPACE/build/kitlib-mac-arm64"
+          INC="-IFacade -IOCCT/generated"
+          while IFS= read -r d; do INC="$INC -I$d"; done < <(find OCCT/src -type d | sort)
+          find OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c' > "$GITHUB_WORKSPACE/build/kitobj-mac-arm64/sources.txt"
+          echo "Facade/occt_facade.cpp" >> "$GITHUB_WORKSPACE/build/kitobj-mac-arm64/sources.txt"
+          wc -l "$GITHUB_WORKSPACE/build/kitobj-mac-arm64/sources.txt"
+          export SDK INC GITHUB_WORKSPACE
+          compile_one() {
+            src="$1"
+            obj="$GITHUB_WORKSPACE/build/kitobj-mac-arm64/$(printf '%s' "$src" | md5 -q).o"
+            case "$src" in
+              *.c) clang -target arm64-apple-macos14.0 -isysroot "$SDK" -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+              *)   clang++ -std=gnu++17 -target arm64-apple-macos14.0 -isysroot "$SDK" -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+            esac
+          }
+          export -f compile_one
+          xargs -P "$(sysctl -n hw.ncpu)" -I SRC bash -c 'compile_one "$@"' _ SRC \
+            < "$GITHUB_WORKSPACE/build/kitobj-mac-arm64/sources.txt"
+          ar rcs "$GITHUB_WORKSPACE/build/kitlib-mac-arm64/libCascadeKit.a" "$GITHUB_WORKSPACE/build/kitobj-mac-arm64"/*.o
+          ls -la "$GITHUB_WORKSPACE/build/kitlib-mac-arm64/"
+
+      - name: Build CascadeKit for macOS x86_64 (direct clang, cross)
+        if: steps.kitcache-x86_64.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk macosx --show-sdk-path)"
+          cd "$GITHUB_WORKSPACE/cascade-port-src"
+          mkdir -p "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64" "$GITHUB_WORKSPACE/build/kitlib-mac-x86_64"
+          INC="-IFacade -IOCCT/generated"
+          while IFS= read -r d; do INC="$INC -I$d"; done < <(find OCCT/src -type d | sort)
+          find OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c' > "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/sources.txt"
+          echo "Facade/occt_facade.cpp" >> "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/sources.txt"
+          wc -l "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/sources.txt"
+          export SDK INC GITHUB_WORKSPACE
+          compile_one() {
+            src="$1"
+            obj="$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/$(printf '%s' "$src" | md5 -q).o"
+            case "$src" in
+              *.c) clang -target x86_64-apple-macos14.0 -isysroot "$SDK" -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+              *)   clang++ -std=gnu++17 -target x86_64-apple-macos14.0 -isysroot "$SDK" -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+            esac
+          }
+          export -f compile_one
+          xargs -P "$(sysctl -n hw.ncpu)" -I SRC bash -c 'compile_one "$@"' _ SRC \
+            < "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/sources.txt"
+          ar rcs "$GITHUB_WORKSPACE/build/kitlib-mac-x86_64/libCascadeKit.a" "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64"/*.o
+          ls -la "$GITHUB_WORKSPACE/build/kitlib-mac-x86_64/"
+
+      - name: Lipo CascadeKit universal + build Layer-2 engine (both archs)
+        run: |
+          set -euo pipefail
+          mkdir -p build/kitlib-mac build/engine-mac-arm64 build/engine-mac-x86_64
+          lipo -create \
+            build/kitlib-mac-arm64/libCascadeKit.a \
+            build/kitlib-mac-x86_64/libCascadeKit.a \
+            -output build/kitlib-mac/libCascadeKit.a
+          echo "CascadeKit archs: $(lipo -archs build/kitlib-mac/libCascadeKit.a)"
+          SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+          for src in cc_interpreter ccgeom_mc ccsim ccsim_commands ccsim_backend_mc; do
+            clang++ -std=c++17 -O2 \
+              -target arm64-apple-macos14.0 -isysroot "$SDK_PATH" \
+              -ICore/native/include -ICore/native/src \
+              -Icascade-port-src/Facade \
+              -c "Core/native/src/$src.cpp" -o "build/engine-mac-arm64/$src.o"
+            clang++ -std=c++17 -O2 \
+              -target x86_64-apple-macos14.0 -isysroot "$SDK_PATH" \
+              -ICore/native/include -ICore/native/src \
+              -Icascade-port-src/Facade \
+              -c "Core/native/src/$src.cpp" -o "build/engine-mac-x86_64/$src.o"
+          done
+          ar rcs build/engine-mac-arm64/libCascadeConsoleEngine.a build/engine-mac-arm64/*.o
+          ar rcs build/engine-mac-x86_64/libCascadeConsoleEngine.a build/engine-mac-x86_64/*.o
+          lipo -create \
+            build/engine-mac-arm64/libCascadeConsoleEngine.a \
+            build/engine-mac-x86_64/libCascadeConsoleEngine.a \
+            -output build/libCascadeConsoleEngine.a
+          echo "Engine archs: $(lipo -archs build/libCascadeConsoleEngine.a)"
+          nm build/engine-mac-x86_64/libCascadeConsoleEngine.a | grep -E "cc_execute|mc_clone_shape" || true
+
+      - name: Write CCascadeConsole module map
+        run: |
+          mkdir -p build/ccmodule
+          cat > build/ccmodule/module.modulemap <<EOF
+          module CCascadeConsole {
+              header "$GITHUB_WORKSPACE/Core/native/include/cc_facade.h"
+              export *
+          }
+          EOF
+          cat build/ccmodule/module.modulemap
+
+      - name: Build CascadeConsole Mac app (universal, native engine)
+        run: |
+          xcodebuild build \
+            -project Apps/Mac/CascadeConsoleMac.xcodeproj \
+            -scheme CascadeConsoleMac \
+            -configuration Release \
+            -sdk macosx \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/dd-mac \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS=CASCADE_NATIVE_ENGINE \
+            SWIFT_INCLUDE_PATHS="$GITHUB_WORKSPACE/build/ccmodule" \
+            HEADER_SEARCH_PATHS='$(inherited) '"$GITHUB_WORKSPACE/Core/native/include" \
+            OTHER_LDFLAGS='$(inherited) -L'"$GITHUB_WORKSPACE/build/kitlib-mac"' -L'"$GITHUB_WORKSPACE/build"' -lCascadeKit -lCascadeConsoleEngine -lc++'
+
+      - name: Gate — universal slices, native engine in BOTH, bundle assets, version
+        run: |
+          set -euo pipefail
+          APP_PATH="build/dd-mac/Build/Products/Release/CascadeConsole.app"
+          test -d "$APP_PATH"
+          test -f "$APP_PATH/Contents/Resources/catalog.json"
+          test -f "$APP_PATH/Contents/Resources/default.metallib"
+          test -f "$APP_PATH/Contents/Resources/OCCT-LGPL-2.1.txt"
+          test -f "$APP_PATH/Contents/Resources/OCCT-LGPL-EXCEPTION.txt"
+          test -f "$APP_PATH/Contents/Resources/welcome.cascade"
+          test -f "$APP_PATH/Contents/Resources/sample-project.cascade"
+          echo "GATE PASS: bundle resources (catalog, metallib, both OCCT licences, samples)"
+          test "$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist")" = "0.3.1"
+          test "$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH/Contents/Info.plist")" = "8"
+          test "$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Contents/Info.plist")" = "com.user.cascadeconsole"
+          echo "GATE PASS: version 0.3.1 (8), bundle id com.user.cascadeconsole"
+          BIN="$APP_PATH/Contents/MacOS/CascadeConsole"
+          ARCHS="$(lipo -archs "$BIN")"
+          echo "Executable archs: $ARCHS"
+          case "$ARCHS" in *x86_64*) ;; *) echo "MISSING x86_64 slice"; exit 1;; esac
+          case "$ARCHS" in *arm64*) ;; *) echo "MISSING arm64 slice"; exit 1;; esac
+          for a in arm64 x86_64; do
+            lipo "$BIN" -thin "$a" -output "build/bin-$a"
+            echo "--- $a slice symbols:"
+            nm "build/bin-$a" | grep -E "_cc_execute$|_cc_session_create$|_mc_clone_shape$|_mc_export_stl$"
+            nm "build/bin-$a" | grep -qE " _cc_execute$"
+            nm "build/bin-$a" | grep -qE " _cc_session_create$"
+            nm "build/bin-$a" | grep -qE " _mc_clone_shape$"
+            nm "build/bin-$a" | grep -qE " _mc_export_stl$"
+          done
+          echo "GATE PASS: universal binary, native engine linked in BOTH slices (not the stub)"
+
+      - name: Ad-hoc sign the app
+        run: |
+          APP_PATH="build/dd-mac/Build/Products/Release/CascadeConsole.app"
+          codesign --force --deep --sign - --timestamp=none "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -dv "$APP_PATH" 2>&1 | head -6
+
+      - name: Package Mac app zip
+        run: |
+          APP_PATH="build/dd-mac/Build/Products/Release/CascadeConsole.app"
+          rm -rf CascadeConsole-Mac-unsigned
+          mkdir -p CascadeConsole-Mac-unsigned
+          cp -R "$APP_PATH" CascadeConsole-Mac-unsigned/
+          cp Apps/Mac/INSTALL.txt CascadeConsole-Mac-unsigned/
+          zip -qry CascadeConsole-Mac-unsigned.zip CascadeConsole-Mac-unsigned
+          ls -lh CascadeConsole-Mac-unsigned.zip
+
       - name: Upload Mac build
         uses: actions/upload-artifact@v4
         with:
           name: CascadeConsoleMac-unsigned
-          path: CascadeConsoleMac-unsigned.zip
+          path: CascadeConsole-Mac-unsigned.zip
+
+  x86-engine-rosetta:
+    name: x86_64 engine execution (Rosetta 2)
+    runs-on: macos-26
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch cascade-port (CascadeKit) at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: a-user-of-python/cascade-ios
+          ref: ${{ env.CASCADE_IOS_SHA }}
+          path: cascade-port-src
+
+      - name: Inject mc_additions into the cascade-port checkout
+        run: python3 Core/native/ci/patch_cascade_port.py cascade-port-src
+
+      - name: Restore cached CascadeKit (macOS x86_64)
+        id: kitcache-x86_64
+        uses: actions/cache@v4
+        with:
+          path: build/kitlib-mac-x86_64
+          key: cascadekit-mac-x86_64-${{ env.CASCADE_IOS_SHA }}-${{ hashFiles('Core/native/ci/patch_cascade_port.py') }}-v1
+
+      - name: Build CascadeKit for macOS x86_64 (direct clang, cross)
+        if: steps.kitcache-x86_64.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk macosx --show-sdk-path)"
+          cd "$GITHUB_WORKSPACE/cascade-port-src"
+          mkdir -p "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64" "$GITHUB_WORKSPACE/build/kitlib-mac-x86_64"
+          INC="-IFacade -IOCCT/generated"
+          while IFS= read -r d; do INC="$INC -I$d"; done < <(find OCCT/src -type d | sort)
+          find OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c' > "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/sources.txt"
+          echo "Facade/occt_facade.cpp" >> "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/sources.txt"
+          export SDK INC GITHUB_WORKSPACE
+          compile_one() {
+            src="$1"
+            obj="$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/$(printf '%s' "$src" | md5 -q).o"
+            case "$src" in
+              *.c) clang -target x86_64-apple-macos14.0 -isysroot "$SDK" -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+              *)   clang++ -std=gnu++17 -target x86_64-apple-macos14.0 -isysroot "$SDK" -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+            esac
+          }
+          export -f compile_one
+          xargs -P "$(sysctl -n hw.ncpu)" -I SRC bash -c 'compile_one "$@"' _ SRC \
+            < "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64/sources.txt"
+          ar rcs "$GITHUB_WORKSPACE/build/kitlib-mac-x86_64/libCascadeKit.a" "$GITHUB_WORKSPACE/build/kitobj-mac-x86_64"/*.o
+          ls -la "$GITHUB_WORKSPACE/build/kitlib-mac-x86_64/"
+
+      - name: Build x86_64 engine + matrix binaries
+        run: |
+          set -euo pipefail
+          mkdir -p build/engine-x86 build/testbin-x86
+          for src in cc_interpreter ccgeom_mc ccsim ccsim_commands ccsim_backend_mc; do
+            clang++ -std=c++17 -O2 -arch x86_64 \
+              -ICore/native/include -ICore/native/src \
+              -Icascade-port-src/Facade \
+              -c "Core/native/src/$src.cpp" -o "build/engine-x86/$src.o"
+          done
+          ar rcs build/engine-x86/libCascadeConsoleEngineX86.a build/engine-x86/*.o
+          clang++ -std=c++17 -O2 -arch x86_64 \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            Core/native/tests/test_view_data_mc.cpp \
+            build/engine-x86/libCascadeConsoleEngineX86.a \
+            build/kitlib-mac-x86_64/libCascadeKit.a \
+            -lc++ -o build/testbin-x86/test_view_data_mc
+          clang++ -std=c++17 -O2 -arch x86_64 \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            Core/native/tests/test_matrix_mc.cpp \
+            build/engine-x86/libCascadeConsoleEngineX86.a \
+            build/kitlib-mac-x86_64/libCascadeKit.a \
+            -lc++ -o build/testbin-x86/test_matrix_mc
+          file build/testbin-x86/test_view_data_mc build/testbin-x86/test_matrix_mc
+
+      - name: Run x86_64 matrix + view-data smoke under Rosetta 2
+        run: |
+          set -euo pipefail
+          if ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "Rosetta 2 not present; installing"
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+          echo "Host arch: $(uname -m); executing x86_64 binaries via Rosetta 2"
+          arch -x86_64 ./build/testbin-x86/test_view_data_mc
+          MATRIX_TMP="$(mktemp -d)"
+          arch -x86_64 ./build/testbin-x86/test_matrix_mc "$MATRIX_TMP" Core/scripts/demo.ccs
+
+  intel-matrix:
+    name: x86_64 engine execution (native Intel runner)
+    runs-on: macos-15-intel
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch cascade-port (CascadeKit) at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: a-user-of-python/cascade-ios
+          ref: ${{ env.CASCADE_IOS_SHA }}
+          path: cascade-port-src
+
+      - name: Inject mc_additions into the cascade-port checkout
+        run: python3 Core/native/ci/patch_cascade_port.py cascade-port-src
+
+      - name: Restore cached CascadeKit (Intel host build)
+        id: kitcache-intel
+        uses: actions/cache@v4
+        with:
+          path: build/kitlib-intel
+          key: cascadekit-intel-${{ env.CASCADE_IOS_SHA }}-${{ hashFiles('Core/native/ci/patch_cascade_port.py') }}-v1
+
+      - name: Build CascadeKit host library (native x86_64, direct clang)
+        if: steps.kitcache-intel.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/cascade-port-src"
+          mkdir -p "$GITHUB_WORKSPACE/build/kitobj-intel" "$GITHUB_WORKSPACE/build/kitlib-intel"
+          INC="-IFacade -IOCCT/generated"
+          while IFS= read -r d; do INC="$INC -I$d"; done < <(find OCCT/src -type d | sort)
+          find OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c' > "$GITHUB_WORKSPACE/build/kitobj-intel/sources.txt"
+          echo "Facade/occt_facade.cpp" >> "$GITHUB_WORKSPACE/build/kitobj-intel/sources.txt"
+          export INC GITHUB_WORKSPACE
+          compile_one() {
+            src="$1"
+            obj="$GITHUB_WORKSPACE/build/kitobj-intel/$(printf '%s' "$src" | md5 -q).o"
+            case "$src" in
+              *.c) clang -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+              *)   clang++ -std=gnu++17 -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+            esac
+          }
+          export -f compile_one
+          xargs -P "$(sysctl -n hw.ncpu)" -I SRC bash -c 'compile_one "$@"' _ SRC \
+            < "$GITHUB_WORKSPACE/build/kitobj-intel/sources.txt"
+          ar rcs "$GITHUB_WORKSPACE/build/kitlib-intel/libCascadeKit.a" "$GITHUB_WORKSPACE/build/kitobj-intel"/*.o
+          ls -la "$GITHUB_WORKSPACE/build/kitlib-intel/"
+
+      - name: Build + run matrix + view-data smoke (native x86_64)
+        run: |
+          set -euo pipefail
+          echo "Runner arch: $(uname -m) (must be x86_64)"
+          test "$(uname -m)" = "x86_64"
+          mkdir -p build/engine-intel build/testbin-intel
+          for src in cc_interpreter ccgeom_mc ccsim ccsim_commands ccsim_backend_mc; do
+            clang++ -std=c++17 -O2 \
+              -ICore/native/include -ICore/native/src \
+              -Icascade-port-src/Facade \
+              -c "Core/native/src/$src.cpp" -o "build/engine-intel/$src.o"
+          done
+          ar rcs build/engine-intel/libCascadeConsoleEngine.a build/engine-intel/*.o
+          clang++ -std=c++17 -O2 \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            Core/native/tests/test_view_data_mc.cpp \
+            build/engine-intel/libCascadeConsoleEngine.a \
+            build/kitlib-intel/libCascadeKit.a \
+            -lc++ -o build/testbin-intel/test_view_data_mc
+          clang++ -std=c++17 -O2 \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            Core/native/tests/test_matrix_mc.cpp \
+            build/engine-intel/libCascadeConsoleEngine.a \
+            build/kitlib-intel/libCascadeKit.a \
+            -lc++ -o build/testbin-intel/test_matrix_mc
+          file build/testbin-intel/test_matrix_mc
+          ./build/testbin-intel/test_view_data_mc
+          MATRIX_TMP="$(mktemp -d)"
+          ./build/testbin-intel/test_matrix_mc "$MATRIX_TMP" Core/scripts/demo.ccs

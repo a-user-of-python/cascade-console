@@ -11,8 +11,31 @@ import SwiftUI
 /// Settings and the script editor are reached from the toolbar in both.
 struct ContentView: View {
     @EnvironmentObject private var state: AppState
+    #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
     @Environment(\.scenePhase) private var scenePhase
+
+    /// macOS has no size classes: a Mac window always gets the
+    /// regular three-panel layout (v0.3.1 — the Mac app compiles
+    /// these same sources).
+    private var isRegularWidth: Bool {
+        #if os(iOS)
+        sizeClass == .regular
+        #else
+        true
+        #endif
+    }
+
+    /// `.topBarTrailing` does not exist on macOS; the toolbar group
+    /// goes in the primary-action area there instead.
+    private var trailingToolbarPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .primaryAction
+        #endif
+    }
     @AppStorage(SettingsKeys.welcomeShown) private var welcomeShown = false
     @AppStorage(SettingsKeys.autosave) private var autosave = true
 
@@ -27,7 +50,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if sizeClass == .regular {
+            if isRegularWidth {
                 regularLayout
             } else {
                 compactLayout
@@ -50,7 +73,7 @@ struct ContentView: View {
                 ConsoleView()
                     .navigationTitle("Console")
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: trailingToolbarPlacement) {
                             Button("Done") { showingConsole = false }
                         }
                     }
@@ -165,7 +188,7 @@ struct ContentView: View {
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
+        ToolbarItemGroup(placement: trailingToolbarPlacement) {
             Button {
                 confirmingNewProject = true
             } label: {
@@ -209,7 +232,7 @@ struct ContentView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 TextField("File name", text: $state.currentFileName)
-                    .textInputAutocapitalization(.never)
+                    .noAutocapitalization()
                     .autocorrectionDisabled(true)
                     .padding(10)
                 Divider()
@@ -230,7 +253,7 @@ struct ContentView: View {
             }
             .navigationTitle("Script")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: trailingToolbarPlacement) {
                     Button("Done") { showingScriptEditor = false }
                 }
             }

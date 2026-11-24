@@ -221,7 +221,7 @@ struct CommandPanelView: View {
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
                 TextField("Blank = auto-assign", text: $draftName)
-                    .textInputAutocapitalization(.never)
+                    .noAutocapitalization()
                     .autocorrectionDisabled(true)
                     .textFieldStyle(.roundedBorder)
             }
@@ -242,9 +242,9 @@ struct CommandPanelView: View {
                     Spacer()
                     TextField(param.defaultValue,
                               text: stringBinding(for: param))
-                        .textInputAutocapitalization(.never)
+                        .noAutocapitalization()
                         .autocorrectionDisabled(true)
-                        .keyboardType(.numbersAndPunctuation)
+                        .numericKeyboard()
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 84)
                         .multilineTextAlignment(.trailing)
@@ -273,7 +273,7 @@ struct CommandPanelView: View {
                 Text(param.label)
                     .font(.callout)
                 TextField(param.defaultValue, text: stringBinding(for: param))
-                    .textInputAutocapitalization(.never)
+                    .noAutocapitalization()
                     .autocorrectionDisabled(true)
                     .textFieldStyle(.roundedBorder)
                 if param.type == .edgeList {
