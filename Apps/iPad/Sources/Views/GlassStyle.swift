@@ -56,6 +56,19 @@ extension View {
     }
 }
 
+extension ToolbarItemPlacement {
+    /// The trailing toolbar placement: `.topBarTrailing` on iOS;
+    /// macOS has no top bar, so the primary-action area instead
+    /// (v0.3.1 — one spelling for every toolbar in the shared UI).
+    static var trailing: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .primaryAction
+        #endif
+    }
+}
+
 /// Small pill button used in toolbars and the viewport overlay.
 struct GlassChipButton: View {
     let title: String

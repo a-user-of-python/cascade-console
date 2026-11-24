@@ -45,7 +45,7 @@ struct WelcomeView: View {
             .padding()
             .navigationTitle("Welcome")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .trailing) {
                     Button("Done") { dismiss() }
                 }
             }

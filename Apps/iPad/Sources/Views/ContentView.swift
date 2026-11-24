@@ -26,16 +26,6 @@ struct ContentView: View {
         true
         #endif
     }
-
-    /// `.topBarTrailing` does not exist on macOS; the toolbar group
-    /// goes in the primary-action area there instead.
-    private var trailingToolbarPlacement: ToolbarItemPlacement {
-        #if os(iOS)
-        .topBarTrailing
-        #else
-        .primaryAction
-        #endif
-    }
     @AppStorage(SettingsKeys.welcomeShown) private var welcomeShown = false
     @AppStorage(SettingsKeys.autosave) private var autosave = true
 
@@ -73,7 +63,7 @@ struct ContentView: View {
                 ConsoleView()
                     .navigationTitle("Console")
                     .toolbar {
-                        ToolbarItem(placement: trailingToolbarPlacement) {
+                        ToolbarItem(placement: .trailing) {
                             Button("Done") { showingConsole = false }
                         }
                     }
@@ -188,7 +178,7 @@ struct ContentView: View {
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: trailingToolbarPlacement) {
+        ToolbarItemGroup(placement: .trailing) {
             Button {
                 confirmingNewProject = true
             } label: {
@@ -253,7 +243,7 @@ struct ContentView: View {
             }
             .navigationTitle("Script")
             .toolbar {
-                ToolbarItem(placement: trailingToolbarPlacement) {
+                ToolbarItem(placement: .trailing) {
                     Button("Done") { showingScriptEditor = false }
                 }
             }

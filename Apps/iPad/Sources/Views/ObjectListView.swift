@@ -85,7 +85,7 @@ struct PartTreeView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .trailing) {
                 Button {
                     newFolderParent = nil
                     newFolderName = ""
