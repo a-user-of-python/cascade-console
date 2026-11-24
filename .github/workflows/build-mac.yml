@@ -41,7 +41,7 @@ jobs:
           ls cascade-port-src/Facade cascade-port-src/OCCT | head
 
       - name: Inject mc_additions into the cascade-port checkout
-        run: python3 Core/native/patch_cascade_port.py cascade-port-src
+        run: python3 Core/native/ci/patch_cascade_port.py cascade-port-src
 
       - name: Verify project and scheme exist
         run: |
