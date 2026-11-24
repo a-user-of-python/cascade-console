@@ -53,6 +53,7 @@
 		4CA828D2029ED93F507E54CB /* MeshBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2832F9925C34934165BA92 /* MeshBuffer.swift */; };
 		90FD1C108B098E0BE134F790 /* EngineMeshAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98B633CEE57121D15B66A51 /* EngineMeshAdapter.swift */; };
 		B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E37E3031BB95344C6955ECEB /* Renderer.swift */; };
+		5CE1A11E55AA202411240002 /* SceneHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE1A11E55AA202411240001 /* SceneHelpers.swift */; };
 		738671A8703034CAE1F7D60D /* SceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A541D50550CEACC7F3A9E026 /* SceneStore.swift */; };
 		461CDBA82AC4277FDB20D6E9 /* ViewCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */; };
 		D70372D4EE9FE86D52566BA0 /* ViewerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E632BCF1CBCAB36F1726BDEC /* ViewerBridge.swift */; };
@@ -89,6 +90,7 @@
 		FB2832F9925C34934165BA92 /* MeshBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeshBuffer.swift"; sourceTree = "<group>"; };
 		E98B633CEE57121D15B66A51 /* EngineMeshAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EngineMeshAdapter.swift"; sourceTree = "<group>"; };
 		E37E3031BB95344C6955ECEB /* Renderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Renderer.swift"; sourceTree = "<group>"; };
+		5CE1A11E55AA202411240001 /* SceneHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SceneHelpers.swift"; sourceTree = "<group>"; };
 		A541D50550CEACC7F3A9E026 /* SceneStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SceneStore.swift"; sourceTree = "<group>"; };
 		80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewCommands.swift"; sourceTree = "<group>"; };
 		E632BCF1CBCAB36F1726BDEC /* ViewerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ViewerBridge.swift"; sourceTree = "<group>"; };
@@ -220,6 +222,7 @@
 				FB2832F9925C34934165BA92 /* MeshBuffer.swift */,
 				E98B633CEE57121D15B66A51 /* EngineMeshAdapter.swift */,
 				E37E3031BB95344C6955ECEB /* Renderer.swift */,
+				5CE1A11E55AA202411240001 /* SceneHelpers.swift */,
 				A541D50550CEACC7F3A9E026 /* SceneStore.swift */,
 				80C463C0B2C81BE28D8F6EEF /* ViewCommands.swift */,
 				E632BCF1CBCAB36F1726BDEC /* ViewerBridge.swift */,
@@ -382,6 +385,7 @@
 				4CA828D2029ED93F507E54CB /* MeshBuffer.swift in Sources */,
 				90FD1C108B098E0BE134F790 /* EngineMeshAdapter.swift in Sources */,
 				B8B6FA5165D5DB254936B8A4 /* Renderer.swift in Sources */,
+				5CE1A11E55AA202411240002 /* SceneHelpers.swift in Sources */,
 				738671A8703034CAE1F7D60D /* SceneStore.swift in Sources */,
 				461CDBA82AC4277FDB20D6E9 /* ViewCommands.swift in Sources */,
 				D70372D4EE9FE86D52566BA0 /* ViewerBridge.swift in Sources */,
@@ -444,7 +448,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -455,7 +459,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.2.3;
+				MARKETING_VERSION = 0.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -468,7 +472,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -479,7 +483,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.2.3;
+				MARKETING_VERSION = 0.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.user.cascadeconsole;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

@@ -99,7 +99,12 @@ dispatch lands. **Simulation is included**: the `sim` command family
 own solver over OCCT geometry — 35/35 host checks) is registered in
 the same interpreter. **Face-number labels**: `view labels faces on`
 shows each face's census index (the number `@face <n>` accepts) as a
-high-contrast chip at the face's centroid in the 3D view. After every successful command the app pulls the
+high-contrast chip at the face's centroid in the 3D view. **Edge-number
+labels** (v0.2.4): `view labels edges on` shows each edge's census index
+(the number `fillet`/`chamfer ... edges i,j,...` accepts) at the edge's
+midpoint. **Camera**: `view rotate <azimuth> <elevation>` (degrees,
+absolute; `view rotate by ...` for relative) and compact XYZ arrows at
+the origin (`view axes on|off`, ~20% of the scene diagonal). After every successful command the app pulls the
 session tessellation (`cc_view_data`) through the CCM1 contract into
 the real Metal viewer. The **Mac app remains on the stub engine**
 for now: its target still carries its own per-app engine types and

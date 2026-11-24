@@ -204,7 +204,7 @@ final class AppState: ObservableObject {
             }
             return
         }
-        appendLog(.error, "view: unrecognized view command. Try 'view', 'view <name>', 'view fit', 'view iso', 'view labels faces on'.")
+        appendLog(.error, "view: unrecognized view command. Try 'view', 'view <name>', 'view fit', 'view iso', 'view rotate 45 30', 'view labels faces on', 'view labels edges on'.")
     }
 
     // MARK: - Export path routing (app layer)

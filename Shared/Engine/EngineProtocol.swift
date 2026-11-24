@@ -104,20 +104,37 @@ public struct EngineViewObject: Equatable {
             self.indexCount = indexCount
         }
     }
+    /// One census edge (v0.2.4): the backend's 0-based census index —
+    /// the number `fillet/chamfer ... edges i,j,...` accepts — plus
+    /// its endpoints, from ccgeom_edge_list (the backend's own edge
+    /// enumeration, never re-derived in the viewer).
+    public struct Edge: Equatable {
+        public var edgeIndex: Int32
+        public var start: [Double]   // xyz
+        public var end: [Double]     // xyz
+        public init(edgeIndex: Int32, start: [Double], end: [Double]) {
+            self.edgeIndex = edgeIndex
+            self.start = start
+            self.end = end
+        }
+    }
     public var name: String
     public var vertices: [Float]   // 3 * vertexCount, xyz positions
     public var indices: [Int32]    // 3 * triangleCount
     public var volume: Double
     public var bbox: [Double]      // minX, minY, minZ, maxX, maxY, maxZ
     public var faceRanges: [FaceRange]
+    public var edges: [Edge]
     public init(name: String, vertices: [Float], indices: [Int32],
-                volume: Double, bbox: [Double], faceRanges: [FaceRange] = []) {
+                volume: Double, bbox: [Double], faceRanges: [FaceRange] = [],
+                edges: [Edge] = []) {
         self.name = name
         self.vertices = vertices
         self.indices = indices
         self.volume = volume
         self.bbox = bbox
         self.faceRanges = faceRanges
+        self.edges = edges
     }
 }
 

@@ -375,6 +375,28 @@ int main(int argc, char** argv) {
     check(i.code("sim modal") == 5002, "sim modal: E5002 NOT_IMPLEMENTED (honest)");
   }
 
+  // ---- edge census view data (v0.2.4) ---------------------------------------
+  // The viewer's `view labels edges` prints view-data edge indices;
+  // on the device backend they must equal the mc census the
+  // fillet/chamfer `edges` selector uses (full per-edge proof lives
+  // in test_view_data_mc; here: counts + demo-part census equality).
+  {
+    std::printf("== edge census (view data) ==\n");
+    Session i;
+    check(i.run("box eb 10 20 30") == 0, "edges: box created");
+    double vol = 0, area = 0, bb[6]; int f = 0, e = 0;
+    check(cc_object_stats(i.s, "eb", &vol, &area, bb, &f, &e) == 0 && e == 12,
+          "edges: census edge count == 12");
+    CCViewData* objs = nullptr; int n = 0;
+    check(cc_view_data(i.s, "eb", 0.5, &objs, &n) == 0 && n == 1, "edges: view data");
+    check(objs && objs[0].edgeCount == e, "edges: label count == census count (box)");
+    bool seqOk = objs && objs[0].edgeCount == 12;
+    if (objs) for (int k = 0; k < objs[0].edgeCount; ++k)
+      if (objs[0].edges[k].edgeIndex != k) seqOk = false;
+    check(seqOk, "edges: indices are the 0-based census sequence");
+    cc_free_view_data(objs, n);
+  }
+
   // ---- demo script (full pipeline) ------------------------------------------
   if (demoPath) {
     std::printf("== demo script ==\n");
@@ -386,6 +408,17 @@ int main(int argc, char** argv) {
     if (rc == 0)
       check(near(i.volume("part3"), 30937.339, 0.01),
             "demo.ccs: part3 volume == host-proven 30937.339");
+    if (rc == 0) {
+      double dv = 0, da = 0, dbb[6]; int df = 0, de = 0;
+      check(cc_object_stats(i.s, "part3", &dv, &da, dbb, &df, &de) == 0 && de > 0,
+            "demo.ccs: part3 census edge count > 0");
+      CCViewData* dobjs = nullptr; int dn = 0;
+      check(cc_view_data(i.s, "part3", 0.5, &dobjs, &dn) == 0 && dn == 1,
+            "demo.ccs: part3 view data");
+      check(dobjs && dobjs[0].edgeCount == de,
+            "demo.ccs: part3 label count == census edge count");
+      cc_free_view_data(dobjs, dn);
+    }
   }
 
   std::printf("RESULT: %d pass, %d fail (mc per-command matrix)\n", g_pass, g_fail);

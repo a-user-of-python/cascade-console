@@ -43,7 +43,7 @@ from OCP.GProp import GProp_GProps
 from OCP.gp import gp_Pnt, gp_Vec, gp_Trsf
 
 MAGIC = b"CCM1"
-VERSION = 1
+VERSION = 2  # v2 (v0.2.4): per-object census-edge section after centre
 OUT = Path(__file__).with_name("sample_mesh.ccm")
 
 
@@ -128,7 +128,25 @@ def tessellate(shape, deflection, angular):
     return vertices, indices, groups
 
 
-def write_ccm(path, name, geometry_version, vertices, indices, groups):
+def census_edges(shape):
+    """Census edges in TopExp.MapShapes(TopAbs_EDGE) order — the same
+    enumeration the core's ccgeom_edge_list and the fillet/chamfer
+    `edges i,j,...` selector use. Returns [(start, end), ...]."""
+    from OCP.TopExp import TopExp
+    from OCP.TopAbs import TopAbs_EDGE
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+    emap = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(shape, TopAbs_EDGE, emap)
+    edges = []
+    for i in range(1, emap.Extent() + 1):
+        edge = TopoDS.Edge_s(emap.FindKey(i))
+        a = BRep_Tool.Pnt_s(TopExp.FirstVertex_s(edge))
+        b = BRep_Tool.Pnt_s(TopExp.LastVertex_s(edge))
+        edges.append(((a.X(), a.Y(), a.Z()), (b.X(), b.Y(), b.Z())))
+    return edges
+
+
+def write_ccm(path, name, geometry_version, vertices, indices, groups, edges):
     name_bytes = name.encode("utf-8")
     xs = [v[0] for v in vertices]; ys = [v[1] for v in vertices]; zs = [v[2] for v in vertices]
     bbox = (min(xs), min(ys), min(zs), max(xs), max(ys), max(zs))
@@ -148,6 +166,12 @@ def write_ccm(path, name, geometry_version, vertices, indices, groups):
         f.write(struct.pack("<%dI" % len(indices), *indices))
         f.write(struct.pack("<6f", *bbox))
         f.write(struct.pack("<3f", *centre))
+        # v2 edge section: count, then per edge (index, start xyz, end xyz)
+        f.write(struct.pack("<I", len(edges)))
+        for i, (a, b) in enumerate(edges):
+            f.write(struct.pack("<I", i))
+            f.write(struct.pack("<3f", *a))
+            f.write(struct.pack("<3f", *b))
     return bbox
 
 
@@ -172,11 +196,18 @@ def read_ccm(path):
     idx = take("<%dI" % icount)
     bbox = take("<6f")
     centre = take("<3f")
+    edges = []
+    if version >= 2:
+        (ne,) = take("<I")
+        for _ in range(ne):
+            (ei,) = take("<I")
+            a = take("<3f"); b = take("<3f")
+            edges.append((ei, a, b))
     assert off == len(data), f"trailing bytes: parsed {off} of {len(data)}"
     return dict(magic=magic, version=version, count=count, name=name,
                 gver=gver, groups=groups, vcount=vcount, icount=icount,
                 verts=verts, idx=idx, bbox=bbox, centre=centre,
-                file_bytes=len(data))
+                edges=edges, file_bytes=len(data))
 
 
 def main():
@@ -209,8 +240,10 @@ def main():
               f"faceGroups={len(groups):2d} tessellation={dt:8.1f} ms")
 
     verts, idx, groups = results["standard"]
-    bbox = write_ccm(OUT, "sample", 1, verts, idx, groups)
-    print(f"wrote {OUT.name}: {OUT.stat().st_size} bytes (standard profile)")
+    edges = census_edges(shape)
+    bbox = write_ccm(OUT, "sample", 1, verts, idx, groups, edges)
+    print(f"wrote {OUT.name}: {OUT.stat().st_size} bytes (standard profile, "
+          f"{len(edges)} census edges)")
 
     # ---- read back and verify the contract ----
     m = read_ccm(OUT)
@@ -238,8 +271,15 @@ def main():
         cx, cy, cz = uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx
         tri_area += 0.5 * math.sqrt(cx * cx + cy * cy + cz * cz)
     area_err = abs(tri_area - area) / area * 100.0
+    # v2 edge section: count and endpoints must match the census exactly.
+    assert len(m["edges"]) == len(edges), "edge count mismatch vs census"
+    for (ei, a, b), (wa, wb) in zip(m["edges"], edges):
+        for got, want in zip(a + b, wa + wb):
+            assert abs(got - want) < 1e-4, f"edge {ei} endpoint mismatch"
+    assert [e[0] for e in m["edges"]] == list(range(len(edges))), \
+        "edge indices are not the 0-based census sequence"
     print(f"read-back OK: vertices={m['vcount']} indices={m['icount']} "
-          f"groups={len(m['groups'])} fileBytes={m['file_bytes']}")
+          f"groups={len(m['groups'])} edges={len(m['edges'])} fileBytes={m['file_bytes']}")
     print(f"max |normal|-1 error : {worst_normal_err:.2e}")
     print(f"mesh triangle area   : {tri_area:.3f} mm^2 "
           f"(vs OCCT {area:.3f}, error {area_err:.3f}%)")

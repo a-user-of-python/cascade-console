@@ -48,6 +48,21 @@ public struct OrbitCamera: Equatable {
         elevation = min(limit, max(-limit, elevation + elevationDelta))
     }
 
+    /// Absolute orbit position from degrees — `view rotate <az> <el>`
+    /// (v0.2.4). Elevation clamps to the same pole limit as orbiting.
+    public mutating func setRotation(azimuthDegrees: Float, elevationDegrees: Float) {
+        azimuth = azimuthDegrees * .pi / 180
+        let limit: Float = 89.9 * .pi / 180
+        elevation = min(limit, max(-limit, elevationDegrees * .pi / 180))
+    }
+
+    /// Relative orbit from degrees — `view rotate by <dAz> <dEl>`
+    /// (v0.2.4); identical semantics to orbit(azimuthDelta:...).
+    public mutating func rotateBy(azimuthDegrees: Float, elevationDegrees: Float) {
+        orbit(azimuthDelta: azimuthDegrees * .pi / 180,
+              elevationDelta: elevationDegrees * .pi / 180)
+    }
+
     /// Pan in the camera's screen plane. `scale` = world units per point.
     public mutating func pan(right: Float, up: Float, scale: Float) {
         let forward = simd_normalize(target - eyePosition)

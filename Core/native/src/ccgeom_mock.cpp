@@ -266,3 +266,34 @@ int ccgeom_face_ranges(CCGeomShape* s, double,
   *outRanges = buf; *outCount = (int)ranges.size();
   if (err) *err = CCGEOM_OK; return CCGEOM_OK;
 }
+
+int ccgeom_edge_list(CCGeomShape* s, CCGeomEdge** outEdges, int* outCount, int* err) {
+  if (!s) return setErr(err, CCGEOM_ERR_INVALID_ARG, "mock edge_list: null");
+  // Same honesty rule as the tessellation: the mock's only geometry is
+  // the bounding-box placeholder. When the shape's own census count is
+  // 12 (boxes and box-like booleans) the placeholder's 12 edges ARE the
+  // list, in the tessellation's corner order; for any other shape the
+  // mock cannot enumerate census edges and returns an empty list
+  // rather than inventing endpoints. (The census invariant — label
+  // count == stats edge count, endpoints == backend census — is
+  // asserted on the two real backends: OCCT host + mc device path.)
+  std::vector<CCGeomEdge> edges;
+  if (s->edges == 12) {
+    const double* b = s->bbox;
+    double c[8][3] = {{b[0], b[1], b[2]}, {b[3], b[1], b[2]}, {b[3], b[4], b[2]}, {b[0], b[4], b[2]},
+                      {b[0], b[1], b[5]}, {b[3], b[1], b[5]}, {b[3], b[4], b[5]}, {b[0], b[4], b[5]}};
+    static const int pairs[12][2] = {{0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}};
+    for (int i = 0; i < 12; ++i) {
+      CCGeomEdge e;
+      e.edgeIndex = i;
+      std::memcpy(e.start, c[pairs[i][0]], sizeof(e.start));
+      std::memcpy(e.end, c[pairs[i][1]], sizeof(e.end));
+      edges.push_back(e);
+    }
+  }
+  CCGeomEdge* buf = (CCGeomEdge*)std::malloc((edges.empty() ? 1 : edges.size()) * sizeof(CCGeomEdge));
+  if (!buf) return setErr(err, CCGEOM_ERR_OCCT, "mock edge_list: out of memory");
+  std::memcpy(buf, edges.data(), edges.size() * sizeof(CCGeomEdge));
+  *outEdges = buf; *outCount = (int)edges.size();
+  if (err) *err = CCGEOM_OK; return CCGEOM_OK;
+}

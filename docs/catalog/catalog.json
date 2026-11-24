@@ -2206,7 +2206,7 @@
    "args": "<name> [fit]",
    "occt_class": "— app viewer (Metal tessellation from BRepMesh_IncrementalMesh)",
    "toolkit": "TKMesh (source data)",
-   "description": "Show the named shape in the 3D viewer. The viewer is the app's, not OCCT's AIS/OpenGL — OCCT supplies the triangulation.",
+   "description": "Show the named shape in the 3D viewer. The viewer is the app's, not OCCT's AIS/OpenGL — OCCT supplies the triangulation. Subcommands include: view fit / view iso / view top|front|..., view rotate <azimuthDeg> <elevationDeg> (absolute orbit; 'view rotate by <dAz> <dEl>' is relative), view labels faces on|off, view labels edges on|off (labels show the backend census indices — the numbers @face and fillet/chamfer 'edges i,j,...' accept), view grid on|off, view axes on|off (small XYZ arrows at the origin).",
    "example": "view body1"
   },
   {

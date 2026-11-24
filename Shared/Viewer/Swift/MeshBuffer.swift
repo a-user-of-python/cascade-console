@@ -7,7 +7,7 @@
 //  plain triangle buffers - the viewer never sees OCCT types.
 //
 //  Binary interchange format "CCM1" (all integers/floats little-endian):
-//    header : char[4] magic "CCM1", UInt32 version (=1),
+//    header : char[4] magic "CCM1", UInt32 version (=1 or 2),
 //             UInt32 objectCount, UInt32 reserved (=0)
 //    per object:
 //             UInt32 nameByteCount, name UTF-8 bytes
@@ -21,6 +21,13 @@
 //             index[ ] : UInt32 (triangle list, CCW, outward normals)
 //             Float32 bbox[6]  (minX, minY, minZ, maxX, maxY, maxZ)
 //             Float32 centre[3] (bbox centre; explode pivot reference)
+//             -- version 2 only (v0.2.4), appended per object:
+//             UInt32 edgeCount
+//             edge[ ]: UInt32 edgeIndex (the backend's 0-based census
+//                      index — the number `fillet/chamfer ... edges
+//                      i,j,...` accepts), Float32 start[3], end[3]
+//  The loader accepts versions 1 and 2; v1 objects simply have no
+//  edge list. The writer (EngineMeshAdapter) emits version 2.
 //
 //  Vertices are NOT welded across faces: each BRep face contributes its
 //  own vertex block so face normals stay sharp at CAD edges. Normals are
@@ -74,12 +81,29 @@ public struct MeshFaceGroup: Equatable {
     public var indexCount: UInt32
 }
 
+/// One census edge of an object (CCM1 v2): the backend's 0-based
+/// census index plus the edge's endpoints, carried verbatim from
+/// ccgeom_edge_list — the same enumeration the fillet/chamfer
+/// `edges i,j,...` selector uses. The viewer's edge labels print
+/// `edgeIndex`; nothing is re-derived in the viewer.
+public struct MeshEdge: Equatable {
+    public var edgeIndex: UInt32
+    public var start: SIMD3<Float>
+    public var end: SIMD3<Float>
+    public init(edgeIndex: UInt32, start: SIMD3<Float>, end: SIMD3<Float>) {
+        self.edgeIndex = edgeIndex
+        self.start = start
+        self.end = end
+    }
+}
+
 public struct MeshObject: Identifiable, Equatable {
     public let id: String                       // stable scene name
     public var geometryVersion: UInt64          // bump on any core rebuild
     public var vertices: [MeshVertex]
     public var indices: [UInt32]
     public var faceGroups: [MeshFaceGroup]
+    public var edges: [MeshEdge]            // census edges (CCM1 v2; [] for v1)
     public var boundingBoxMin: SIMD3<Float>
     public var boundingBoxMax: SIMD3<Float>
     public var centre: SIMD3<Float>
@@ -91,7 +115,7 @@ public struct MeshObject: Identifiable, Equatable {
                 vertices: [MeshVertex], indices: [UInt32],
                 faceGroups: [MeshFaceGroup],
                 boundingBoxMin: SIMD3<Float>, boundingBoxMax: SIMD3<Float>,
-                centre: SIMD3<Float>) {
+                centre: SIMD3<Float>, edges: [MeshEdge] = []) {
         self.id = id
         self.geometryVersion = geometryVersion
         self.vertices = vertices
@@ -100,6 +124,7 @@ public struct MeshObject: Identifiable, Equatable {
         self.boundingBoxMin = boundingBoxMin
         self.boundingBoxMax = boundingBoxMax
         self.centre = centre
+        self.edges = edges
     }
 }
 
@@ -154,7 +179,9 @@ public enum MeshBufferLoader {
         let magic = try r.bytes(4)
         guard magic == Data("CCM1".utf8) else { throw MeshBufferError.badMagic }
         let version = try r.u32()
-        guard version == 1 else { throw MeshBufferError.unsupportedVersion(version) }
+        guard version == 1 || version == 2 else {
+            throw MeshBufferError.unsupportedVersion(version)
+        }
         let objectCount = try r.u32()
         _ = try r.u32() // reserved
         var objects: [MeshObject] = []
@@ -202,11 +229,22 @@ public enum MeshBufferLoader {
             let bbMin = try r.vec3()
             let bbMax = try r.vec3()
             let centre = try r.vec3()
+            var edges: [MeshEdge] = []
+            if version >= 2 {
+                let edgeCount = Int(try r.u32())
+                edges.reserveCapacity(edgeCount)
+                for _ in 0..<edgeCount {
+                    let edgeIndex = try r.u32()
+                    let start = try r.vec3()
+                    let end = try r.vec3()
+                    edges.append(MeshEdge(edgeIndex: edgeIndex, start: start, end: end))
+                }
+            }
             objects.append(MeshObject(id: name, geometryVersion: geometryVersion,
                                       vertices: vertices, indices: indices,
                                       faceGroups: groups,
                                       boundingBoxMin: bbMin, boundingBoxMax: bbMax,
-                                      centre: centre))
+                                      centre: centre, edges: edges))
         }
         return objects
     }

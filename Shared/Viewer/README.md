@@ -57,14 +57,21 @@ units, `nil` until two points are picked), `didWriteScreenshotTo`,
 
 ## Mesh buffer format (CCM1)
 
-Little-endian throughout. Header: magic `CCM1`, `UInt32` version = 1,
-`UInt32` objectCount, `UInt32` reserved. Per object: name (length-prefixed
+Little-endian throughout. Header: magic `CCM1`, `UInt32` version
+(= 1 or 2; the writer emits 2), `UInt32` objectCount, `UInt32` reserved.
+Per object: name (length-prefixed
 UTF-8, = scene id), `UInt64 geometryVersion`, face groups
 (`sourceFaceIndex, vertexStart, vertexCount, indexStart, indexCount` —
 one per BRep face, enabling per-face selection), then interleaved
-vertices `x y z nx ny nz` (Float32, **stride 24 bytes**, identical in the
-file and the Metal vertex buffer), `UInt32` triangle indices (CCW,
-outward), bbox (6×Float32), centre (3×Float32).
+vertices `x y z nx ny nz` (Float32, **stride 24 bytes** in the file —
+the Metal vertex buffer instead holds `[MeshVertex]` in its memory
+layout, stride 32 / normal at 16; see `MeshVertex.bufferStride`),
+`UInt32` triangle indices (CCW,
+outward), bbox (6×Float32), centre (3×Float32). Version 2 appends, per
+object, the census-edge section: `UInt32` edgeCount, then per edge
+`UInt32` edgeIndex + start/end (3×Float32 each) — the backend's own
+edge census (`ccgeom_edge_list`), the indices `fillet`/`chamfer`
+accept. The loader accepts v1 (no edges) and v2.
 
 **Coordinate contract:** OCCT model space as-is — right-handed, **Z-up**,
 model units (mm by convention). No axis conversion anywhere; the camera
@@ -95,7 +102,11 @@ All parsed by `ViewCommands.swift`; also directly constructible.
 | `view explode <0…2>` | parts translate away from scene centre along their centre line (0 = assembled) |
 | `view screenshot [path] [w h]` | offscreen render to PNG (default Pictures folder, 1600×1200) |
 | `view measure on\|off\|clear` | on: next two picks set the measure points; distance reported via delegate + drawn as a line |
-| `view grid on\|off`, `view axes on\|off` | grid on the z=0 plane (auto step: power of ten from scene size); X red / Y green / Z blue axes |
+| `view grid on\|off`, `view axes on\|off` | grid on the z=0 plane (auto step: power of ten from scene size); axes = compact XYZ arrows at the origin (~20% of the scene diagonal, cone heads, X/Y/Z letter chips; X red / Y green / Z blue) |
+| `view rotate <azDeg> <elDeg>` | orbit camera to an absolute azimuth/elevation (degrees; elevation clamps to ±89.9°) |
+| `view rotate by <dAzDeg> <dElDeg>` | orbit camera relative by the given degrees |
+| `view labels faces on\|off` | face-number chips (census face indices — the `@face <n>` numbers) |
+| `view labels edges on\|off` | edge-number chips at edge midpoints (census edge indices — the `fillet`/`chamfer ... edges i,j,...` numbers); default off |
 | `view background <topRRGGBB> <bottomRRGGBB>` | gradient background |
 | `view projection ortho\|perspective` | projection toggle (fit/zoom keep both parameterisations in sync) |
 | `view hide <id>` / `view show <id>` | per-object visibility |
@@ -142,7 +153,9 @@ same layout the Swift parser uses. Results, 2026-11-23:
   184 triangles / 7 face groups** · fine: 530 vertices / 520 triangles.
 - CCM1 round-trip: counts, face groups, and bbox match OCCT exactly;
   max |normal|−1 error **2.94×10⁻⁸**; summed mesh triangle area
-  2626.616 mm² vs OCCT 2626.195 mm² (**0.016%** error); file 7,086 bytes.
+  2626.616 mm² vs OCCT 2626.195 mm² (**0.016%** error); file 7,510 bytes
+  (v2, including the 15-edge census section — count + endpoints
+  asserted against the TopExp census on read-back).
 - Verdict printed by the script: `CONTRACT VERIFIED`.
 
 **Swift execution gate (v0.2.3):** the Python contract above proves
@@ -161,6 +174,19 @@ fan: the CCM1 file packs each vertex in 24 bytes, but a
 `MeshVertex` in memory has stride 32 (two 16-byte-stride
 `SIMD3<Float>` members, normal at offset 16). The file stride and
 the buffer stride are different constants on purpose now.
+
+**Line layout (v0.2.4):** the same disease shipped a second time in
+the line path — `LineVertex` (position + padding + colour) has
+memory stride 48 with the colour at offset 32, while the line
+descriptor declared 32/16 and line buffer copies truncated to
+`count * 32` bytes; the v0.2.3 device build drew a fan of coloured
+lines from the model's origin corner (0 of 53 default-scene
+segments intact under the GPU read). `LineVertex` and the grid /
+axis-arrow / edge-overlay builders now live in `SceneHelpers.swift`
+with `MemoryLayout`-derived constants, and the harness executes
+the builders and re-reads their output through the declared line
+layout, alongside the v0.2.4 edge round-trip and the `view rotate`
+/ `view labels edges` parser + camera checks.
 
 ## Integration checklist for the two apps
 

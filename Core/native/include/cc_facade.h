@@ -109,6 +109,16 @@ typedef struct CCFaceRange {
   int indexCount;
 } CCFaceRange;
 
+/// One census edge for the viewer's edge labels (v0.2.4): the backend's
+/// 0-based census index — the number `fillet/chamfer ... edges i,j,...`
+/// accepts — plus the edge's endpoints, from the backend's own census
+/// enumeration (ccgeom_edge_list). Mirrors CCGeomEdge.
+typedef struct CCViewEdge {
+  int edgeIndex;
+  double start[3];
+  double end[3];
+} CCViewEdge;
+
 typedef struct CCViewData {
   char*   name;          // heap copy
   float*  vertices;      // 3 * vertexCount
@@ -119,6 +129,8 @@ typedef struct CCViewData {
   double  bbox[6];
   CCFaceRange* faceRanges;  // heap array, faceRangeCount entries
   int     faceRangeCount;
+  CCViewEdge* edges;        // heap array, edgeCount entries (v0.2.4)
+  int     edgeCount;
 } CCViewData;
 
 int  cc_view_data(CCSession* s, const char* nameOrNull, double deflectionMM,

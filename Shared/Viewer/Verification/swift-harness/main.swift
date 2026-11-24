@@ -13,9 +13,11 @@
 //
 //  This harness is compiled by the mc-backend-matrix CI job from the
 //  PRODUCTION sources (MeshBuffer.swift, EngineMeshAdapter.swift,
-//  EngineProtocol.swift, SharedModels.swift) plus this file, and run
-//  against a CCFX fixture produced in the same job by the real
-//  engine (Core/native/tests/dump_view_fixture.cpp, mc backend):
+//  EngineProtocol.swift, SharedModels.swift, SceneHelpers.swift,
+//  ViewCommands.swift, ViewerBridge.swift, Camera.swift,
+//  SceneStore.swift) plus this file, and run against a CCFX fixture
+//  produced in the same job by the real engine
+//  (Core/native/tests/dump_view_fixture.cpp, mc backend):
 //  a 10x2x10 box and a cylinder, as cc_view_data returned them.
 //
 //  Checks:
@@ -28,6 +30,20 @@
 //     descriptor declares — and must come back identical, with the
 //     re-read mesh's signed volume still correct. This is the check
 //     whose absence let the v0.2.2 fan ship.
+//   * v0.2.4: census edges round-trip (CCFX v2 -> EngineViewObject ->
+//     CCM1 v2 -> MeshObject.edges): count, 0-based census sequence,
+//     and the box's endpoint set == its 12 geometric edges.
+//   * v0.2.4: the LINE path — the one whose absence let the v0.2.3
+//     fan ship. The production SceneLineBuilder grid + axis-arrow
+//     builders run here on the default scene (box 10x2x10 at the
+//     origin); the built [LineVertex] array is re-read through
+//     LineVertex.bufferStride / bufferColorOffset (the values the
+//     line descriptor declares) and every vertex must come back
+//     exact — position AND colour. Arrow length == 20% of the scene
+//     diagonal; the mesh edge-overlay builder runs on the parsed box.
+//   * v0.2.4: view commands — production ViewCommandParser output for
+//     `view rotate` (absolute + by), `view labels edges`, and the
+//     production OrbitCamera application of the parsed angles.
 //
 //  Exit code 0 iff every check passes.
 //
@@ -52,6 +68,7 @@ struct FixtureObject {
     var volume: Double
     var bbox: [Double]
     var faceRanges: [EngineViewObject.FaceRange]
+    var edges: [EngineViewObject.Edge]
 }
 
 struct FixtureReader {
@@ -74,7 +91,7 @@ func loadFixture(_ path: String) -> [FixtureObject] {
     var r = FixtureReader(data: data)
     let magic = r.bytes(4)
     guard magic == Data("CCFX".utf8) else { print("FAIL: bad fixture magic"); exit(2) }
-    _ = r.i32() // version
+    let version = r.i32()
     let count = Int(r.i32())
     var out: [FixtureObject] = []
     for _ in 0..<count {
@@ -96,8 +113,20 @@ func loadFixture(_ path: String) -> [FixtureObject] {
                                                      indexStart: r.i32(),
                                                      indexCount: r.i32()))
         }
+        var edges: [EngineViewObject.Edge] = []
+        if version >= 2 {
+            let ec = Int(r.i32())
+            for _ in 0..<ec {
+                let edgeIndex = r.i32()
+                let start = [r.f64(), r.f64(), r.f64()]
+                let end = [r.f64(), r.f64(), r.f64()]
+                edges.append(EngineViewObject.Edge(edgeIndex: edgeIndex,
+                                                   start: start, end: end))
+            }
+        }
         out.append(FixtureObject(name: name, vertices: verts, indices: idx,
-                                 volume: vol, bbox: bbox, faceRanges: ranges))
+                                 volume: vol, bbox: bbox, faceRanges: ranges,
+                                 edges: edges))
     }
     return out
 }
@@ -139,7 +168,8 @@ check(fixture.count == 2, "fixture holds 2 objects (got \(fixture.count))")
 
 let engineObjects = fixture.map {
     EngineViewObject(name: $0.name, vertices: $0.vertices, indices: $0.indices,
-                     volume: $0.volume, bbox: $0.bbox, faceRanges: $0.faceRanges)
+                     volume: $0.volume, bbox: $0.bbox, faceRanges: $0.faceRanges,
+                     edges: $0.edges)
 }
 
 let meshes: [MeshObject]
@@ -196,6 +226,47 @@ for (fx, mesh) in zip(fixture, meshes) {
         check(reach, "cyl: derived bbox reaches the engine bbox (size \(hi - lo))")
     }
 
+    // Census edges (v0.2.4): the fixture's cc_view_data edges must
+    // survive EngineViewObject -> CCM1 v2 -> MeshObject.edges with
+    // indices and endpoints intact — these are the numbers the
+    // viewer's edge labels print and `fillet ... edges i` accepts
+    // (the backend-side census proof lives in the C++ suites).
+    check(mesh.edges.count == fx.edges.count,
+          "\(fx.name): edge count survives the round trip (\(mesh.edges.count) vs \(fx.edges.count))")
+    var edgeSeq = mesh.edges.count == fx.edges.count
+    for (j, e) in mesh.edges.enumerated() {
+        if e.edgeIndex != UInt32(j) || e.edgeIndex != UInt32(fx.edges[j].edgeIndex) { edgeSeq = false }
+        if !approx(Double(e.start.x), fx.edges[j].start[0], 1e-4) ||
+           !approx(Double(e.start.y), fx.edges[j].start[1], 1e-4) ||
+           !approx(Double(e.start.z), fx.edges[j].start[2], 1e-4) ||
+           !approx(Double(e.end.x), fx.edges[j].end[0], 1e-4) ||
+           !approx(Double(e.end.y), fx.edges[j].end[1], 1e-4) ||
+           !approx(Double(e.end.z), fx.edges[j].end[2], 1e-4) { edgeSeq = false }
+    }
+    check(edgeSeq, "\(fx.name): edge indices are the census sequence and endpoints are intact")
+    if fx.name == "test" {
+        check(mesh.edges.count == 12, "test: box carries 12 census edges (got \(mesh.edges.count))")
+        func key(_ p: SIMD3<Float>) -> String {
+            String(format: "%.3f,%.3f,%.3f", Double(p.x), Double(p.y), Double(p.z))
+        }
+        let corners: [SIMD3<Float>] = [
+            SIMD3(0, 0, 0), SIMD3(10, 0, 0), SIMD3(10, 2, 0), SIMD3(0, 2, 0),
+            SIMD3(0, 0, 10), SIMD3(10, 0, 10), SIMD3(10, 2, 10), SIMD3(0, 2, 10)]
+        let pairs = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6),
+                     (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
+        var want = Set<String>()
+        for (a, b) in pairs {
+            let ka = key(corners[a]), kb = key(corners[b])
+            want.insert(ka < kb ? "\(ka)|\(kb)" : "\(kb)|\(ka)")
+        }
+        var got = Set<String>()
+        for e in mesh.edges {
+            let ka = key(e.start), kb = key(e.end)
+            got.insert(ka < kb ? "\(ka)|\(kb)" : "\(kb)|\(ka)")
+        }
+        check(got == want, "test: edge endpoint set == the box's 12 geometric edges")
+    }
+
     // The GPU read contract — the v0.2.2 regression check. The
     // renderer uploads [MeshVertex] verbatim and the vertex
     // descriptor fetches position at (i * bufferStride) and normal
@@ -237,6 +308,146 @@ for (fx, mesh) in zip(fixture, meshes) {
     check(approx(rereadVolume, vol, 0.01) && rereadVolume > 0,
           "\(fx.name): GPU-layout re-read keeps signed volume (got \(rereadVolume))")
 }
+
+// MARK: - Line path (v0.2.4) — the fan regression gate
+//
+// The v0.2.3 device verdict: the box rendered solid but a fan of thin
+// coloured lines radiated from its origin corner. Root cause (proven
+// numerically, FIXLOG v0.2.4): LineVertex's real layout is stride 48
+// / colour offset 32, while the line descriptor declared 32/16 and
+// every line buffer copy truncated to count*32 bytes — 0 of the
+// default scene's 53 segments survived the GPU read. This section
+// executes the PRODUCTION builders for the exact default scene and
+// re-reads the built array through the descriptor's declared layout.
+
+func rereadLines(_ lines: [LineVertex]) -> [LineVertex] {
+    var out: [LineVertex] = []
+    lines.withUnsafeBytes { raw in
+        guard let base = raw.baseAddress else { return }
+        func f(_ off: Int) -> Float { base.loadUnaligned(fromByteOffset: off, as: Float.self) }
+        for i in lines.indices {
+            let b = i * LineVertex.bufferStride
+            let p = SIMD3<Float>(f(b), f(b + 4), f(b + 8))
+            let co = LineVertex.bufferColorOffset
+            let c = SIMD4<Float>(f(b + co), f(b + co + 4), f(b + co + 8), f(b + co + 12))
+            out.append(LineVertex(p, c))
+        }
+    }
+    return out
+}
+
+check(LineVertex.bufferStride == 48 && LineVertex.bufferColorOffset == 32,
+      "LineVertex memory layout is stride 48 / colour offset 32 (got \(LineVertex.bufferStride)/\(LineVertex.bufferColorOffset))")
+
+let sceneLo = SIMD3<Float>(0, 0, 0)
+let sceneHi = SIMD3<Float>(10, 2, 10)
+let sceneCentre = SIMD3<Float>(5, 1, 5)
+let grid = SceneLineBuilder.gridLines(lo: sceneLo, hi: sceneHi, centre: sceneCentre)
+check(grid.count == 100, "grid builder: default scene grid has 100 vertices (got \(grid.count))")
+let diagonal = SceneLineBuilder.sceneDiagonal(lo: sceneLo, hi: sceneHi)
+let arrows = SceneLineBuilder.axisArrowLines(diagonal: diagonal)
+check(arrows.count == 54, "arrow builder: 3 arrows x 18 vertices (got \(arrows.count))")
+let defaultLines = grid + arrows
+check(rereadLines(defaultLines) == defaultLines,
+      "line GPU read: all \(defaultLines.count) default-scene line vertices (grid + arrows) re-read exact through stride \(LineVertex.bufferStride)/offset \(LineVertex.bufferColorOffset)")
+let defaultRaw = defaultLines.withUnsafeBytes { $0.count }
+check(defaultRaw == defaultLines.count * LineVertex.bufferStride,
+      "line array byte count == count * bufferStride (\(defaultRaw))")
+
+let arrowLen = SceneLineBuilder.axisArrowLength(diagonal: diagonal)
+check(approx(Double(arrowLen), 0.2 * Double(diagonal), 1e-4),
+      "arrow length == 20% of scene diagonal (\(arrowLen) vs \(0.2 * diagonal))")
+check(SceneLineBuilder.axisArrowLength(diagonal: 1.0) == SceneLineBuilder.axisArrowMinimum,
+      "arrow length floors at the minimum on tiny scenes")
+var arrowsBounded = true
+for v in arrows where simd_length(v.position) > arrowLen + 1e-4 { arrowsBounded = false }
+check(arrowsBounded, "no arrow vertex reaches beyond the arrow length from the origin")
+let tips = SceneLineBuilder.axisArrowTips(diagonal: diagonal)
+check(tips.count == 3 && tips[0].label == "X" && tips[1].label == "Y" && tips[2].label == "Z" &&
+      tips[0].tip == SIMD3<Float>(arrowLen, 0, 0) && tips[1].tip == SIMD3<Float>(0, arrowLen, 0) &&
+      tips[2].tip == SIMD3<Float>(0, 0, arrowLen),
+      "arrow tips sit at (L,0,0), (0,L,0), (0,0,L) with X/Y/Z labels")
+
+// Edge-overlay builder on the parsed box mesh (production input: the
+// unwelded MeshObject the renderer holds).
+if let boxMesh = meshes.first(where: { $0.id == "test" }) {
+    let overlay = SceneLineBuilder.meshEdgeLines(vertices: boxMesh.vertices,
+                                                 indices: boxMesh.indices)
+    check(overlay.count == 72,
+          "edge overlay builder: unwelded box yields 36 segments (got \(overlay.count / 2))")
+    func key(_ p: SIMD3<Float>) -> String {
+        String(format: "%.3f,%.3f,%.3f", Double(p.x), Double(p.y), Double(p.z))
+    }
+    let corners: [SIMD3<Float>] = [
+        SIMD3(0, 0, 0), SIMD3(10, 0, 0), SIMD3(10, 2, 0), SIMD3(0, 2, 0),
+        SIMD3(0, 0, 10), SIMD3(10, 0, 10), SIMD3(10, 2, 10), SIMD3(0, 2, 10)]
+    let pairs = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6),
+                 (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
+    var want = Set<String>()
+    for (a, b) in pairs {
+        let ka = key(corners[a]), kb = key(corners[b])
+        want.insert(ka < kb ? "\(ka)|\(kb)" : "\(kb)|\(ka)")
+    }
+    var got = Set<String>()
+    var overlayColorsOK = true
+    var i = 0
+    while i + 1 < overlay.count {
+        let ka = key(overlay[i].position), kb = key(overlay[i + 1].position)
+        got.insert(ka < kb ? "\(ka)|\(kb)" : "\(kb)|\(ka)")
+        if overlay[i].color != SceneLineBuilder.edgeOverlayColor ||
+           overlay[i + 1].color != SceneLineBuilder.edgeOverlayColor { overlayColorsOK = false }
+        i += 2
+    }
+    check(got == want, "edge overlay: segment endpoint set == the box's 12 geometric edges")
+    check(overlayColorsOK, "edge overlay: every vertex carries the overlay colour")
+    check(rereadLines(overlay) == overlay,
+          "edge overlay: vertices re-read exact through the line layout")
+}
+
+// MARK: - View commands (v0.2.4): rotate + labels edges
+//
+// Production parser output, then the production OrbitCamera
+// application of the parsed angles (the same calls Renderer.apply
+// makes), driven through a SceneStore holding the parsed box.
+
+func parsed(_ line: String) -> ViewerCommand? {
+    if case .success(let cmd) = ViewCommandParser.parse(line) { return cmd }
+    return nil
+}
+check(parsed("view rotate 45 30") == .setCameraRotation(azimuthDegrees: 45, elevationDegrees: 30),
+      "parse: view rotate 45 30 -> setCameraRotation(45, 30)")
+check(parsed("view rotate by 10 -5") == .rotateCameraBy(azimuthDegrees: 10, elevationDegrees: -5),
+      "parse: view rotate by 10 -5 -> rotateCameraBy(10, -5)")
+check(parsed("view labels edges on") == .setEdgeLabelsEnabled(true),
+      "parse: view labels edges on -> setEdgeLabelsEnabled(true)")
+check(parsed("view labels edges off") == .setEdgeLabelsEnabled(false),
+      "parse: view labels edges off -> setEdgeLabelsEnabled(false)")
+check(parsed("view labels faces on") == .setFaceLabelsEnabled(true),
+      "parse: view labels faces on still -> setFaceLabelsEnabled(true)")
+check(parsed("view rotate 45") == nil && parsed("view rotate by 10") == nil &&
+      parsed("view labels edges") == nil && parsed("view labels bogus on") == nil,
+      "parse: malformed rotate/labels forms are rejected")
+
+let store = SceneStore()
+if let boxMesh = meshes.first(where: { $0.id == "test" }) {
+    _ = store.load(boxMesh, props: ObjectDisplayProps())
+}
+if case .setCameraRotation(let az, let el) = parsed("view rotate 45 30") {
+    store.camera.setRotation(azimuthDegrees: az, elevationDegrees: el)
+}
+check(approx(Double(store.camera.azimuth), Double.pi / 4, 1e-5) &&
+      approx(Double(store.camera.elevation), Double.pi / 6, 1e-5),
+      "camera: after view rotate 45 30, azimuth == 45 deg, elevation == 30 deg (got \(store.camera.azimuth), \(store.camera.elevation))")
+if case .rotateCameraBy(let dAz, let dEl) = parsed("view rotate by 45 -30") {
+    store.camera.rotateBy(azimuthDegrees: dAz, elevationDegrees: dEl)
+}
+check(approx(Double(store.camera.azimuth), Double.pi / 2, 1e-5) &&
+      approx(Double(store.camera.elevation), 0, 1e-5),
+      "camera: after view rotate by 45 -30, azimuth == 90 deg, elevation == 0 (got \(store.camera.azimuth), \(store.camera.elevation))")
+var clampedCam = OrbitCamera()
+clampedCam.setRotation(azimuthDegrees: 0, elevationDegrees: 120)
+check(approx(Double(clampedCam.elevation), 89.9 * Double.pi / 180, 1e-5),
+      "camera: view rotate elevation clamps at 89.9 deg (got \(clampedCam.elevation))")
 
 // Pin the ABI facts the descriptor relies on: if a future toolchain
 // changed the SIMD layout, the MemoryLayout-derived constants would

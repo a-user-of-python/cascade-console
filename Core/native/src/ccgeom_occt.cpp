@@ -471,3 +471,32 @@ int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
     return CCGEOM_OK;
   } catch (const std::exception& e) { return setErr(err, CCGEOM_ERR_OCCT, std::string("face_ranges: ") + e.what()); }
 }
+
+// Census edges in the SAME TopExp::MapShapes(TopAbs_EDGE) order
+// pickEdges() selects from for fillet/chamfer — census index i is
+// FindKey(i+1) here exactly as there, so the viewer's edge labels
+// number the edges the `edges i,j,...` selector accepts.
+int ccgeom_edge_list(CCGeomShape* s, CCGeomEdge** outEdges, int* outCount, int* err) {
+  if (!s || !outEdges || !outCount) return setErr(err, CCGEOM_ERR_INVALID_ARG, "edge_list: null argument");
+  try {
+    CCIndexMap em;
+    TopExp::MapShapes(s->shape, TopAbs_EDGE, em);
+    std::vector<CCGeomEdge> edges;
+    for (int i = 1; i <= em.Extent(); ++i) {
+      TopoDS_Edge edge = TopoDS::Edge(em.FindKey(i));
+      gp_Pnt a = BRep_Tool::Pnt(TopExp::FirstVertex(edge));
+      gp_Pnt b = BRep_Tool::Pnt(TopExp::LastVertex(edge));
+      CCGeomEdge e;
+      e.edgeIndex = i - 1;
+      e.start[0] = a.X(); e.start[1] = a.Y(); e.start[2] = a.Z();
+      e.end[0] = b.X(); e.end[1] = b.Y(); e.end[2] = b.Z();
+      edges.push_back(e);
+    }
+    CCGeomEdge* buf = (CCGeomEdge*)std::malloc((edges.empty() ? 1 : edges.size()) * sizeof(CCGeomEdge));
+    if (!buf) return setErr(err, CCGEOM_ERR_OCCT, "edge_list: out of memory");
+    std::memcpy(buf, edges.data(), edges.size() * sizeof(CCGeomEdge));
+    *outEdges = buf; *outCount = (int)edges.size();
+    if (err) *err = CCGEOM_OK;
+    return CCGEOM_OK;
+  } catch (const std::exception& e) { return setErr(err, CCGEOM_ERR_OCCT, std::string("edge_list: ") + e.what()); }
+}

@@ -17,7 +17,7 @@
 // tested against the real device-path bytes.
 //
 // Fixture format "CCFX" (all little-endian):
-//   char[4] "CCFX", int32 version (=1), int32 objectCount
+//   char[4] "CCFX", int32 version (=2), int32 objectCount
 //   per object: int32 nameByteCount, name bytes,
 //               int32 vertexCount, int32 triangleCount,
 //               float32 vertices[3*vertexCount],
@@ -25,7 +25,10 @@
 //               float64 volume, float64 bbox[6],
 //               int32 faceRangeCount,
 //               faceRange[int32 faceIndex, int32 indexStart,
-//                         int32 indexCount] * faceRangeCount
+//                         int32 indexCount] * faceRangeCount,
+//               int32 edgeCount,                       (v2, v0.2.4)
+//               edge[int32 edgeIndex, float64 start[3],
+//                    float64 end[3]] * edgeCount
 //
 // Usage: dump_view_fixture <output.ccfx>
 #include "cc_facade.h"
@@ -60,7 +63,7 @@ int main(int argc, char** argv) {
     FILE* f = fopen(argv[1], "wb");
     if (!f) { perror("fopen"); return 1; }
     fwrite("CCFX", 1, 4, f);
-    wi32(f, 1); wi32(f, count);
+    wi32(f, 2); wi32(f, count);
     for (int i = 0; i < count; i++) {
         CCViewData& d = objs[i];
         int nl = (int)strlen(d.name);
@@ -76,8 +79,14 @@ int main(int argc, char** argv) {
             wi32(f, d.faceRanges[j].indexStart);
             wi32(f, d.faceRanges[j].indexCount);
         }
-        printf("fixture object '%s': %d vertices, %d triangles, volume %.4f\n",
-               d.name, d.vertexCount, d.triangleCount, d.volume);
+        wi32(f, d.edgeCount);
+        for (int j = 0; j < d.edgeCount; j++) {
+            wi32(f, d.edges[j].edgeIndex);
+            for (int k = 0; k < 3; k++) wf64(f, d.edges[j].start[k]);
+            for (int k = 0; k < 3; k++) wf64(f, d.edges[j].end[k]);
+        }
+        printf("fixture object '%s': %d vertices, %d triangles, volume %.4f, %d edges\n",
+               d.name, d.vertexCount, d.triangleCount, d.volume, d.edgeCount);
     }
     fclose(f);
     cc_free_view_data(objs, count);

@@ -36,7 +36,7 @@ public enum EngineMeshAdapter {
 
         let usable = objects.filter { $0.indices.count >= 3 && $0.vertices.count >= 9 }
         data.append(Data("CCM1".utf8))
-        u32(1)                          // version
+        u32(2)                          // version (v2: census-edge section, v0.2.4)
         u32(UInt32(usable.count))      // objectCount
         u32(0)                          // reserved
 
@@ -98,6 +98,16 @@ public enum EngineMeshAdapter {
             f32(Float((bb[0] + bb[3]) / 2))
             f32(Float((bb[1] + bb[4]) / 2))
             f32(Float((bb[2] + bb[5]) / 2))
+
+            // Census edges (CCM1 v2): the backend's own enumeration
+            // from ccgeom_edge_list, carried verbatim — edgeIndex is
+            // the number `fillet/chamfer ... edges i,j,...` accepts.
+            u32(UInt32(obj.edges.count))
+            for e in obj.edges {
+                u32(UInt32(e.edgeIndex))
+                for v in e.start { f32(Float(v)) }
+                for v in e.end { f32(Float(v)) }
+            }
         }
         return data
     }

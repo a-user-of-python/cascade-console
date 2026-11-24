@@ -20,11 +20,13 @@
 // ============================================================================
 #include "cc_facade.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 static int g_pass = 0, g_fail = 0;
 static void check(bool ok, const std::string& what) {
@@ -229,6 +231,121 @@ int main(int argc, char** argv) {
             "orientation: L prism notch at (10,10), not mirrored to (20,10)");
     }
     cc_free_view_data(o, m);
+  }
+
+  // ---- EDGE CENSUS (v0.2.4) -------------------------------------------
+  // The viewer's edge labels print view-data edge indices; they must
+  // BE the mc backend's census — the numbering mc_fillet/mc_chamfer
+  // select by (facade header: one shared TopExp census space). Proven
+  // here on the device path exactly as on the host OCCT backend:
+  // count == stats, endpoint set == the box's real edges, per-edge
+  // fillet volume matches the labelled edge's length, and a per-edge
+  // chamfer's new face sits at the labelled edge's midpoint.
+  std::printf("== edge census ==\n");
+  {
+    char* o2 = nullptr;
+    cc_execute(s, "box eb 10 20 30", &o2); cc_free_string(o2); o2 = nullptr;
+    double vol = 0, area = 0, bb[6]; int faces = 0, edges = 0;
+    check(cc_object_stats(s, "eb", &vol, &area, bb, &faces, &edges) == 0 && edges == 12,
+          "edges: mc box census edge count == 12");
+    CCViewData* o = nullptr; int m = 0;
+    rc = cc_view_data(s, "eb", 0.5, &o, &m);
+    check(rc == 0 && m == 1, "edges: mc view data for box");
+    double mid[12][3]; double len[12]; bool have = false;
+    if (rc == 0 && m == 1) {
+      const CCViewData& d = o[0];
+      check(d.edgeCount == edges, "edges: mc view-data edge count == stats edge count");
+      bool seqOk = d.edgeCount == 12;
+      for (int k = 0; k < d.edgeCount; ++k) if (d.edges[k].edgeIndex != k) seqOk = false;
+      check(seqOk, "edges: mc indices are the 0-based census sequence 0..11");
+      auto key = [](double x, double y, double z) {
+        char buf[96]; std::snprintf(buf, sizeof buf, "%.3f,%.3f,%.3f", x, y, z); return std::string(buf);
+      };
+      std::vector<std::string> want, got;
+      const double c[8][3] = {{0,0,0},{10,0,0},{10,20,0},{0,20,0},{0,0,30},{10,0,30},{10,20,30},{0,20,30}};
+      const int pr[12][2] = {{0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}};
+      for (auto& p : pr) {
+        std::string a = key(c[p[0]][0], c[p[0]][1], c[p[0]][2]);
+        std::string b2 = key(c[p[1]][0], c[p[1]][1], c[p[1]][2]);
+        want.push_back(a < b2 ? a + "|" + b2 : b2 + "|" + a);
+      }
+      for (int k = 0; k < d.edgeCount && k < 12; ++k) {
+        std::string a = key(d.edges[k].start[0], d.edges[k].start[1], d.edges[k].start[2]);
+        std::string b2 = key(d.edges[k].end[0], d.edges[k].end[1], d.edges[k].end[2]);
+        got.push_back(a < b2 ? a + "|" + b2 : b2 + "|" + a);
+        for (int a3 = 0; a3 < 3; ++a3) mid[k][a3] = (d.edges[k].start[a3] + d.edges[k].end[a3]) / 2;
+        double dx = d.edges[k].end[0] - d.edges[k].start[0];
+        double dy = d.edges[k].end[1] - d.edges[k].start[1];
+        double dz = d.edges[k].end[2] - d.edges[k].start[2];
+        len[k] = std::sqrt(dx * dx + dy * dy + dz * dz);
+      }
+      std::sort(want.begin(), want.end()); std::sort(got.begin(), got.end());
+      check(d.edgeCount == 12 && want == got, "edges: mc endpoint set == the box's 12 geometric edges");
+      have = d.edgeCount == 12;
+    }
+    cc_free_view_data(o, m);
+    if (have) {
+      const double PI = 3.14159265358979323846;
+      bool filletOk = true, chamferOk = true;
+      for (int k = 0; k < 12; ++k) {
+        CCSession* fs = cc_session_create();
+        char* fo = nullptr;
+        cc_execute(fs, "box fb2 10 20 30", &fo); cc_free_string(fo); fo = nullptr;
+        std::string cmd = "fillet ff fb2 1 edges " + std::to_string(k);
+        int frc = cc_execute(fs, cmd.c_str(), &fo); cc_free_string(fo); fo = nullptr;
+        double fv = -1;
+        if (frc == 0) {
+          std::string vc = "volume ff";
+          frc = cc_execute(fs, vc.c_str(), &fo);
+          if (frc == 0 && fo) { std::string t(fo); fv = std::stod(t.substr(t.find("= ") + 2)); }
+          cc_free_string(fo); fo = nullptr;
+        }
+        if (frc != 0 || !near(fv, 6000.0 - (1.0 - PI / 4.0) * len[k], 0.05)) filletOk = false;
+        cc_session_destroy(fs);
+
+        CCSession* cs = cc_session_create();
+        char* co2 = nullptr;
+        cc_execute(cs, "box cb2 10 20 30", &co2); cc_free_string(co2); co2 = nullptr;
+        cmd = "chamfer cf cb2 2 edges " + std::to_string(k);
+        int crc = cc_execute(cs, cmd.c_str(), &co2); cc_free_string(co2); co2 = nullptr;
+        CCViewData* co = nullptr; int cn = 0;
+        bool bound = false;
+        if (crc == 0 && cc_view_data(cs, "cf", 0.5, &co, &cn) == 0 && cn == 1) {
+          const CCViewData& cd = co[0];
+          for (int fr = 0; fr < cd.faceRangeCount && !bound; ++fr) {
+            double cx = 0, cy = 0, cz = 0; int cnt = 0;
+            for (int ix = cd.faceRanges[fr].indexStart;
+                 ix < cd.faceRanges[fr].indexStart + cd.faceRanges[fr].indexCount; ++ix) {
+              int vi = cd.indices[ix];
+              cx += cd.vertices[vi * 3]; cy += cd.vertices[vi * 3 + 1]; cz += cd.vertices[vi * 3 + 2]; ++cnt;
+            }
+            if (!cnt) continue;
+            cx /= cnt; cy /= cnt; cz /= cnt;
+            double dk = 1e300; int nearest = -1;
+            for (int j = 0; j < 12; ++j) {
+              double dx = cx - mid[j][0], dy = cy - mid[j][1], dz = cz - mid[j][2];
+              double dd = dx * dx + dy * dy + dz * dz;
+              if (dd < dk) { dk = dd; nearest = j; }
+            }
+            if (nearest == k && dk < 4.0) bound = true;
+          }
+        }
+        if (!bound) chamferOk = false;
+        cc_free_view_data(co, cn);
+        cc_session_destroy(cs);
+      }
+      check(filletOk, "edges: mc fillet edges k removes (1-pi/4)*L_k for every k");
+      check(chamferOk, "edges: mc chamfer edges k puts its new face at labelled edge k's midpoint, every k");
+    }
+    // Cylinder: label count == census count on a curved shape too.
+    double cv = 0, ca = 0, cbb[6]; int cf = 0, ce = 0;
+    check(cc_object_stats(s, "cyl", &cv, &ca, cbb, &cf, &ce) == 0 && ce > 0,
+          "edges: mc cylinder census edge count > 0");
+    CCViewData* co3 = nullptr; int cm = 0;
+    rc = cc_view_data(s, "cyl", 0.5, &co3, &cm);
+    check(rc == 0 && cm == 1 && co3[0].edgeCount == ce,
+          "edges: mc cylinder label count == census edge count");
+    cc_free_view_data(co3, cm);
   }
 
   cc_session_destroy(s);

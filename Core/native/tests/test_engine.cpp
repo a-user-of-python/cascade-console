@@ -16,12 +16,14 @@
 // ============================================================================
 #include "cc_facade.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 static int g_pass = 0, g_fail = 0, g_skip = 0;
 static void check(bool ok, const std::string& what) {
@@ -309,6 +311,114 @@ int main(int argc, char** argv) {
       check(cc_view_data(demo.s, "part3", 0.5, &dobjs, &dn) == 0 && dn == 1, "labels: demo view data");
       check(dobjs && dobjs[0].faceRangeCount == df, "labels: demo label count == census face count");
       cc_free_view_data(dobjs, dn);
+    }
+  }
+  { Session i;  // EDGE CENSUS (v0.2.4): view-data edges must BE the
+    // backend census — count == cc_object_stats edge count, indices
+    // 0..n-1 in order, endpoints == the shape's real edges, and the
+    // index must SELECT that edge in fillet/chamfer (proven per edge:
+    // single-edge fillet volume matches the labelled edge's length,
+    // and a single-edge chamfer's new face sits at the labelled
+    // edge's midpoint). The viewer's edge labels print these indices.
+    std::string r;
+    check(i.run("box eb 10 20 30", r) == 0, "edges: box created");
+    double vol = 0, area = 0, bb[6]; int faces = 0, edges = 0;
+    check(cc_object_stats(i.s, "eb", &vol, &area, bb, &faces, &edges) == 0 && edges == 12,
+          "edges: box census edge count == 12");
+    CCViewData* objs = nullptr; int n = 0;
+    check(cc_view_data(i.s, "eb", 0.5, &objs, &n) == 0 && n == 1, "edges: view data for box");
+    const CCViewData& d = objs[0];
+    check(d.edgeCount == edges, "edges: view-data edge count == stats edge count");
+    bool seqOk = d.edgeCount == 12;
+    for (int k = 0; k < d.edgeCount; ++k) if (d.edges[k].edgeIndex != k) seqOk = false;
+    check(seqOk, "edges: indices are the 0-based census sequence 0..11");
+    // Endpoint set == the 12 geometric edges of the 10x20x30 box.
+    auto key = [](double x, double y, double z) {
+      char buf[96]; std::snprintf(buf, sizeof buf, "%.3f,%.3f,%.3f", x, y, z); return std::string(buf);
+    };
+    std::vector<std::string> want, got;
+    {
+      const double c[8][3] = {{0,0,0},{10,0,0},{10,20,0},{0,20,0},{0,0,30},{10,0,30},{10,20,30},{0,20,30}};
+      const int pr[12][2] = {{0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}};
+      for (auto& p : pr) {
+        std::string a = key(c[p[0]][0], c[p[0]][1], c[p[0]][2]);
+        std::string b = key(c[p[1]][0], c[p[1]][1], c[p[1]][2]);
+        want.push_back(a < b ? a + "|" + b : b + "|" + a);
+      }
+    }
+    double mid[12][3]; double len[12];
+    for (int k = 0; k < d.edgeCount && k < 12; ++k) {
+      std::string a = key(d.edges[k].start[0], d.edges[k].start[1], d.edges[k].start[2]);
+      std::string b = key(d.edges[k].end[0], d.edges[k].end[1], d.edges[k].end[2]);
+      got.push_back(a < b ? a + "|" + b : b + "|" + a);
+      for (int a3 = 0; a3 < 3; ++a3) mid[k][a3] = (d.edges[k].start[a3] + d.edges[k].end[a3]) / 2;
+      double dx = d.edges[k].end[0] - d.edges[k].start[0];
+      double dy = d.edges[k].end[1] - d.edges[k].start[1];
+      double dz = d.edges[k].end[2] - d.edges[k].start[2];
+      len[k] = std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    std::sort(want.begin(), want.end()); std::sort(got.begin(), got.end());
+    check(d.edgeCount == 12 && want == got, "edges: endpoint set == the box's 12 geometric edges");
+    cc_free_view_data(objs, n);
+    if (!mock && d.edgeCount == 12) {
+      // Per-edge selection proof on the REAL backend.
+      bool filletOk = true, chamferOk = true;
+      for (int k = 0; k < 12; ++k) {
+        Session f;
+        f.run("box fb2 10 20 30");
+        std::string cmd = "fillet ff fb2 1 edges " + std::to_string(k);
+        if (f.run(cmd) != 0) { filletOk = false; break; }
+        double expect = 6000.0 - (1.0 - PI / 4.0) * len[k];
+        if (!near(f.volume("ff"), expect, 0.05)) filletOk = false;
+        Session c2;
+        c2.run("box cb2 10 20 30");
+        cmd = "chamfer cf cb2 2 edges " + std::to_string(k);
+        if (c2.run(cmd) != 0) { chamferOk = false; break; }
+        CCViewData* co = nullptr; int cn = 0;
+        if (cc_view_data(c2.s, "cf", 0.5, &co, &cn) != 0 || cn != 1) { chamferOk = false; break; }
+        // The chamfer's new face centroid must have edge k's midpoint
+        // as its nearest original-edge midpoint.
+        bool bound = false;
+        const CCViewData& cd = co[0];
+        for (int fr = 0; fr < cd.faceRangeCount && !bound; ++fr) {
+          double cx = 0, cy = 0, cz = 0; int cnt = 0;
+          for (int ix = cd.faceRanges[fr].indexStart;
+               ix < cd.faceRanges[fr].indexStart + cd.faceRanges[fr].indexCount; ++ix) {
+            int vi = cd.indices[ix];
+            cx += cd.vertices[vi * 3]; cy += cd.vertices[vi * 3 + 1]; cz += cd.vertices[vi * 3 + 2]; ++cnt;
+          }
+          if (!cnt) continue;
+          cx /= cnt; cy /= cnt; cz /= cnt;
+          double dk = 1e300; int nearest = -1;
+          for (int j = 0; j < 12; ++j) {
+            double dx = cx - mid[j][0], dy = cy - mid[j][1], dz = cz - mid[j][2];
+            double dd = dx * dx + dy * dy + dz * dz;
+            if (dd < dk) { dk = dd; nearest = j; }
+          }
+          if (nearest == k && dk < 4.0) bound = true;  // within 2.0 of midpoint k
+        }
+        if (!bound) chamferOk = false;
+        cc_free_view_data(co, cn);
+      }
+      check(filletOk, "edges: fillet edges k removes (1-pi/4)*L_k for every k (index selects the labelled edge)");
+      check(chamferOk, "edges: chamfer edges k puts its new face at labelled edge k's midpoint, every k");
+      // Demo part: label count == census count on a real multi-op shape.
+      Session demo;
+      char* out = nullptr;
+      int rc = cc_execute_script(demo.s, "../../repo/Core/scripts/demo.ccs", &out);
+      if (rc != 0) rc = cc_execute_script(demo.s, "../repo/Core/scripts/demo.ccs", &out);
+      if (rc != 0) rc = cc_execute_script(demo.s, "repo/Core/scripts/demo.ccs", &out);
+      if (rc != 0) rc = cc_execute_script(demo.s, "../scripts/demo.ccs", &out);
+      cc_free_string(out);
+      double dv = 0, da = 0, dbb[6]; int df = 0, de = 0;
+      check(cc_object_stats(demo.s, "part3", &dv, &da, dbb, &df, &de) == 0, "edges: demo part3 stats");
+      CCViewData* dobjs = nullptr; int dn = 0;
+      check(cc_view_data(demo.s, "part3", 0.5, &dobjs, &dn) == 0 && dn == 1, "edges: demo view data");
+      check(dobjs && dobjs[0].edgeCount == de && de > 0, "edges: demo label count == census edge count");
+      cc_free_view_data(dobjs, dn);
+    } else if (mock) {
+      skip("edges: per-edge fillet/chamfer census binding (mock backend)");
+      skip("edges: demo census count (mock backend)");
     }
   }
   { Session i;  // ORIENTATION invariants (v0.2.2): signed mesh volume

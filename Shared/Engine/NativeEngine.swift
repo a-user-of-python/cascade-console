@@ -143,12 +143,21 @@ public final class NativeEngine: CascadeEngine, EngineViewDataProviding {
                                 indexCount: fr[j].indexCount))
                         }
                     }
+                    var edges: [EngineViewObject.Edge] = []
+                    if let ed = d.edges {
+                        for j in 0..<Int(d.edgeCount) {
+                            edges.append(EngineViewObject.Edge(
+                                edgeIndex: ed[j].edgeIndex,
+                                start: [ed[j].start.0, ed[j].start.1, ed[j].start.2],
+                                end: [ed[j].end.0, ed[j].end.1, ed[j].end.2]))
+                        }
+                    }
                     result.append(EngineViewObject(
                         name: String(cString: d.name),
                         vertices: verts, indices: idx,
                         volume: d.volume,
                         bbox: [d.bbox.0, d.bbox.1, d.bbox.2, d.bbox.3, d.bbox.4, d.bbox.5],
-                        faceRanges: ranges))
+                        faceRanges: ranges, edges: edges))
                 }
                 cc_free_view_data(objects, count)
                 continuation.resume(returning: EngineViewDataResult(objects: result))

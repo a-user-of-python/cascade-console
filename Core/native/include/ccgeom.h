@@ -106,6 +106,23 @@ typedef struct CCGeomFaceRange {
 int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
                        CCGeomFaceRange** outRanges, int* outCount, int* err);
 
+// ---- edge census (v0.2.4) -------------------------------------------------
+// One census edge of a shape: its 0-based census index and its two
+// endpoint positions. The census is the backend's own edge enumeration
+// — the SAME numbering the fillet/chamfer `edges i,j,...` selector and
+// ccgeom_edge_count use (OCCT: TopExp::MapShapes(TopAbs_EDGE) order;
+// mc: the facade's mc_edge_count / mc_edge_info space, which the facade
+// header guarantees is one shared TopExp census). The viewer labels
+// edges with these indices verbatim; nothing is re-derived downstream.
+typedef struct CCGeomEdge {
+  int edgeIndex;
+  double start[3];
+  double end[3];
+} CCGeomEdge;
+/// Heap array of *outCount edges in census order (edgeIndex == position
+/// in the array); free with ccgeom_free_buffer().
+int ccgeom_edge_list(CCGeomShape* s, CCGeomEdge** outEdges, int* outCount, int* err);
+
 // ---- export -----------------------------------------------------------------------------
 int ccgeom_export_step(CCGeomShape* s, const char* path, int* err);
 int ccgeom_export_stl(CCGeomShape* s, const char* path, int* err);

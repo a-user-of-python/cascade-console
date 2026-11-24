@@ -190,3 +190,32 @@ int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
   if (err) *err = CCGEOM_OK;
   return CCGEOM_OK;
 }
+
+// Census edges via the facade's mc_edge_count / mc_edge_info. The
+// facade header (section 8) guarantees ONE shared TopExp census space
+// across mc_tessellate, mc_fillet, mc_chamfer and mc_edge_info, so
+// edge i here is the edge `fillet ... edges i` selects — the viewer's
+// labels carry the backend's own numbering, never a re-derivation.
+int ccgeom_edge_list(CCGeomShape* s, CCGeomEdge** outEdges, int* outCount, int* err) {
+  int e = MC_OK;
+  int ec = mc_edge_count(raw(s), &e);
+  if (e != MC_OK) { if (err) *err = xlate(e); return xlate(e); }
+  CCGeomEdge* buf = (CCGeomEdge*)std::malloc((ec > 0 ? ec : 1) * sizeof(CCGeomEdge));
+  if (!buf) { if (err) *err = CCGEOM_ERR_OCCT; return CCGEOM_ERR_OCCT; }
+  for (int i = 0; i < ec; ++i) {
+    int curveType = 0; double length = 0, radius = 0;
+    double start[3] = {0, 0, 0}, end[3] = {0, 0, 0}, center[3] = {0, 0, 0};
+    int ei = MC_OK;
+    int rc = mc_edge_info(raw(s), i, &curveType, &length, start, end, center, &radius, &ei);
+    if (ei != MC_OK || rc != MC_OK) {
+      std::free(buf);
+      if (err) *err = xlate(ei);
+      return xlate(ei);
+    }
+    buf[i].edgeIndex = i;
+    for (int k = 0; k < 3; ++k) { buf[i].start[k] = start[k]; buf[i].end[k] = end[k]; }
+  }
+  *outEdges = buf; *outCount = ec;
+  if (err) *err = CCGEOM_OK;
+  return CCGEOM_OK;
+}

@@ -774,3 +774,135 @@ LSSupportsOpeningDocumentsInPlace = true. 9,157,068 bytes,
 md5 6fcce7d3a90d04f0449d9b6afec3ce15. The user's device verdict is the
 final judge: create a box — it should render as a solid box
 immediately, with the header reading "1 object(s)".
+
+## v0.2.4 — device-feedback fixes + view features (2026-11-24)
+
+The user's iPad test of v0.2.3: `box test 10 2 10` now renders
+SOLID and the header reads "1 object(s)" — the v0.2.3 stride fix
+works on device. But a fan of thin coloured lines (red,
+yellow-green, grey) radiates from a single point at the box's
+origin corner. The user also asked for: a rotate command, XYZ
+coordinate arrows that "don't take up that much space", and a
+command to label edges.
+
+1. **The fan — the SAME layout disease, in the line path.**
+   v0.2.3 fixed the mesh vertex descriptor; the line pipeline had
+   its own hand-written constants, and they were wrong the same
+   way. `LineVertex` (Renderer.swift, private) is
+   `{ position: SIMD3<Float>, padding: Float, color: SIMD4<Float> }`
+   with a comment claiming "colour at offset 16, stride 32". By
+   the same SIMD layout rules the v0.2.3 probe proved (SIMD3<Float>
+   is 16-byte aligned, 16-byte stride), the real layout is
+   position @0, padding @16, colour @32, **stride 48**. The line
+   vertex descriptor declared stride 32 / colour offset 16, and
+   every line-buffer copy (grid/axes buffer, edge overlay, measure
+   lines) truncated the array to `count * 32` bytes. Convicted by
+   numerical reproduction of the exact default scene (box
+   10x2x10 at the origin, grid + axes visible: 106 line vertices,
+   53 segments — 50 grid + 3 axes): re-reading the built array
+   through the shipped descriptor, only **2 of 106** vertices land
+   on their true position, **0 of 53** segments are intact, and
+   **53 of 53** segments have an endpoint within 1.0 of the
+   origin — the fan's hub at the box's origin corner. The
+   collapsed "positions" are the padding/origin and the grid grey
+   (0.35, 0.37, 0.40) read as a position; the colours are
+   cross-reads of position data ((17, -11, 0) clamps to saturated
+   red, (-7, 13, 0) to green) — the red / yellow-green / grey fan
+   in the screenshot, exactly. With the descriptor at the real
+   layout (48/32), all 106 vertices round-trip exact. A second
+   bug lived in the same function: `rebuildGridIfNeeded`'s cache
+   key ignored the visibility flags and the grid was built
+   unconditionally, so `view grid off` changed nothing and
+   toggling axes never rebuilt. FIX at the wrong layer:
+   `LineVertex` and all line builders moved to the new pure file
+   `Shared/Viewer/Swift/SceneHelpers.swift` (Foundation + simd
+   only, no Metal), with `bufferStride` / `bufferColorOffset`
+   derived from `MemoryLayout` — the descriptor and every buffer
+   copy now use those, and the rebuild key covers the full bounds
+   + both visibility flags, which also gate the builders.
+2. **XYZ arrows, small (feature).** The old axis lines ran from
+   the origin to `half` = 1.2x the scene extent (12 units on this
+   10-unit box — longer than the model). Replaced with compact
+   arrows at the world origin, same axis colours: length =
+   **20% of the scene-bounds diagonal** (2.86 units on this box),
+   floored at 0.5 units so they stay visible on sub-unit scenes;
+   each arrow is a shaft + cone head drawn as lines (4 spokes +
+   base ring, 18 vertices per arrow), with an X / Y / Z letter
+   chip at the tip (black text on the axis colour, face-label chip
+   style). They live in world space and rotate with the scene.
+   Controlled by the existing `view axes on|off`; **default stays
+   ON** — the arrows are now small enough not to interfere, which
+   was the user's actual complaint about the old lines.
+3. **`view rotate` (feature).** `view rotate <azimuthDeg>
+   <elevationDeg>` sets the absolute orbit position (degrees;
+   elevation clamps to the camera's ±89.9° pole limit);
+   `view rotate by <dAzimuthDeg> <dElevationDeg>` rotates
+   relative. The angle application lives in `OrbitCamera`
+   (`setRotation` / `rotateBy`) so the CI harness executes the
+   production code path, not a copy. Object rotation is a
+   different, pre-existing engine command —
+   `rotate <name> <src> <ax> <ay> <az> <angleDeg> [about x,y,z]`
+   (cc_interpreter.cpp) — noted in the catalog so the two are not
+   confused.
+4. **Edge labels (feature).** `view labels edges on|off`
+   (default OFF), mirroring face labels: black-on-white chips at
+   each edge's midpoint, showing the edge's census index. The
+   numbers are the backend's own census, end to end: new
+   `ccgeom_edge_list` (OCCT backend: `TopExp::MapShapes(TopAbs_EDGE)`
+   order — the identical enumeration `pickEdges` selects from for
+   fillet/chamfer; mc backend: the facade's `mc_edge_count` /
+   `mc_edge_info`, whose header guarantees one shared TopExp
+   census across tessellation, fillet, chamfer and edge info; no
+   facade addition was needed; mock: the bbox placeholder's 12
+   edges when the shape's census count is 12, documented) →
+   `CCViewData.edges` → `EngineViewObject.edges` → CCM1 **v2**
+   edge section → `MeshObject.edges` → chips. The loader still
+   accepts CCM1 v1. Census proof, run on BOTH real backends
+   (host OCCT in test_engine, device-path mc in
+   test_view_data_mc + test_matrix_mc): label count ==
+   cc_object_stats edge count (box 12, cylinder, demo part3);
+   endpoint set == the box's 12 geometric edges; and per edge k,
+   `fillet ... edges k` removes exactly (1 - pi/4) * L_k (L_k
+   from the label endpoints — the index selects the labelled
+   edge's length class) AND `chamfer ... edges k` puts its new
+   face at labelled edge k's midpoint (nearest-midpoint binding —
+   the index selects THAT edge, not a same-length sibling).
+   HONEST LIMIT: facing uses a radial test — an edge's midpoint
+   direction from the object centre vs the camera direction —
+   because view data carries endpoints only, no edge normal; a
+   long edge straddling the silhouette can show/hide at its
+   midpoint's discretion. Anchors are mesh-space, exact at
+   explode factor 0, same as face labels.
+5. **The gate grew teeth in the line path.** The Swift harness
+   now also compiles SceneHelpers.swift, ViewCommands.swift,
+   ViewerBridge.swift, Camera.swift and SceneStore.swift from
+   production sources and: runs the production grid + arrow
+   builders on the exact default scene and re-reads the built
+   [LineVertex] array through the declared line layout (every
+   vertex — position AND colour — must come back exact); asserts
+   the arrow length formula (20% of diagonal, floor), tip
+   positions and bounded extent; runs the edge-overlay builder on
+   the parsed box; round-trips the fixture's census edges
+   (CCFX v2 → CCM1 v2 → MeshObject.edges, endpoint set == the
+   box's 12 geometric edges); and parses `view rotate` /
+   `view rotate by` / `view labels edges` with the production
+   parser, applying the parsed angles through the production
+   OrbitCamera methods on a SceneStore. The CCFX fixture format
+   is v2 (adds per-object census edges).
+
+Version: MARKETING_VERSION 0.2.4, CURRENT_PROJECT_VERSION 6.
+Nothing was removed from knownCommands; the new commands are
+app-layer view commands, added to the catalog `view` entry,
+COMMAND_CATALOG.md and COMMAND-COVERAGE.md.
+
+Local results before the push (this tree): engine OCCT (conda
+8.0.1) 123 pass / 0 fail (was 112; +11 edge-census checks),
+engine mock 100 pass / 0 fail / 5 skip (was 94/3; the mock's two
+census-binding checks are honestly skipped — the mock has no
+real fillet/chamfer geometry), sim 35/35 on both backends,
+prototype 47/47, tessellation contract (CCM v2) verified,
+projection guard green, ccgeom_mc.cpp compiles against the real
+cascade-port facade. (Local host runs use the conda OCCT 8.0.1
+tree with a manual rpath-link line — the sandbox has no distro
+OCCT dev packages; CI's engine-host job runs the same suites
+against distro OCCT via build_host.sh / build_sim.sh as before.)

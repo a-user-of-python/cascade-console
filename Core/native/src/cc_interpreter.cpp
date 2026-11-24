@@ -1099,6 +1099,17 @@ int cc_view_data(CCSession* s, const char* nameOrNull, double deflectionMM,
           d.faceRangeCount = rangeCount;
         }
       }
+      {
+        // Census edges for the viewer's edge labels (v0.2.4): same
+        // non-fatal-if-absent pattern as face ranges, but the test
+        // suites assert presence + census equality on both real
+        // backends, so an empty list there fails gates, not silently.
+        CCGeomEdge* edges = nullptr; int edgeCount = 0; int ee = CCGEOM_OK;
+        if (ccgeom_edge_list(t.second, &edges, &edgeCount, &ee) == CCGEOM_OK) {
+          d.edges = (CCViewEdge*)edges;
+          d.edgeCount = edgeCount;
+        }
+      }
       d.volume = s->volumeOf(t.second);
       s->bboxOf(t.second, d.bbox);
       ++n;
@@ -1110,6 +1121,7 @@ int cc_view_data(CCSession* s, const char* nameOrNull, double deflectionMM,
       ccgeom_free_buffer(arr[i].vertices);
       ccgeom_free_buffer(arr[i].indices);
       ccgeom_free_buffer(arr[i].faceRanges);
+      ccgeom_free_buffer(arr[i].edges);
     }
     std::free(arr);
     setLast(s, e);
@@ -1127,6 +1139,7 @@ void cc_free_view_data(CCViewData* objects, int count) {
     ccgeom_free_buffer(objects[i].vertices);
     ccgeom_free_buffer(objects[i].indices);
     ccgeom_free_buffer(objects[i].faceRanges);
+    ccgeom_free_buffer(objects[i].edges);
   }
   std::free(objects);
 }

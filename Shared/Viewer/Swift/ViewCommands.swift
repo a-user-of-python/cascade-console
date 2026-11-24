@@ -16,7 +16,11 @@
 //    view screenshot [path] [width height]  (default: ~/Pictures shot, 1600x1200)
 //    view measure on|off|clear
 //    view grid on|off
-//    view axes on|off
+//    view axes on|off                       (small XYZ arrows at origin)
+//    view rotate <azimuthDeg> <elevationDeg>      (absolute orbit)
+//    view rotate by <dAzimuthDeg> <dElevationDeg>  (relative orbit)
+//    view labels faces on|off
+//    view labels edges on|off
 //    view background <topHex> <bottomHex>   (RRGGBB, e.g. 1a1c20)
 //    view projection ortho|perspective
 //    view hide <id> | view show <id>
@@ -71,12 +75,29 @@ public enum ViewCommandParser {
 
         switch head {
         case "labels":
-            // view labels faces on|off
-            guard args.count == 2, args[0].lowercased() == "faces",
-                  let on = onOff(args[1]) else {
-                return .failure(ViewCommandParseError("usage: view labels faces on|off"))
+            // view labels faces on|off | view labels edges on|off
+            guard args.count == 2, let on = onOff(args[1]) else {
+                return .failure(ViewCommandParseError("usage: view labels faces on|off | view labels edges on|off"))
             }
-            return .success(.setFaceLabelsEnabled(on))
+            switch args[0].lowercased() {
+            case "faces": return .success(.setFaceLabelsEnabled(on))
+            case "edges": return .success(.setEdgeLabelsEnabled(on))
+            default:
+                return .failure(ViewCommandParseError("usage: view labels faces on|off | view labels edges on|off"))
+            }
+        case "rotate":
+            // view rotate <azimuthDeg> <elevationDeg> — absolute orbit
+            // position in degrees. view rotate by <dAz> <dEl> — relative.
+            // (Object rotation is the engine's own command:
+            //  rotate <name> <src> <ax> <ay> <az> <angleDeg>.)
+            if args.count == 3, args[0].lowercased() == "by",
+               let dAz = Float(args[1]), let dEl = Float(args[2]) {
+                return .success(.rotateCameraBy(azimuthDegrees: dAz, elevationDegrees: dEl))
+            }
+            if args.count == 2, let az = Float(args[0]), let el = Float(args[1]) {
+                return .success(.setCameraRotation(azimuthDegrees: az, elevationDegrees: el))
+            }
+            return .failure(ViewCommandParseError("usage: view rotate <azimuthDeg> <elevationDeg> | view rotate by <dAzimuthDeg> <dElevationDeg>"))
         case "fit":
             return .success(.fit)
         case "top", "bottom", "front", "back", "left", "right", "iso":

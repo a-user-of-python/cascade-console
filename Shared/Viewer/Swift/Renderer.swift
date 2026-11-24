@@ -35,12 +35,12 @@ private struct MeshUniforms {
 private struct LineUniforms { var mvp: float4x4 }
 private struct BackgroundUniforms { var top: SIMD4<Float>; var bottom: SIMD4<Float> }
 
-private struct LineVertex {
-    var position: SIMD3<Float>
-    var padding: Float = 0          // keep colour at offset 16, stride 32
-    var color: SIMD4<Float>
-    init(_ p: SIMD3<Float>, _ c: SIMD4<Float>) { position = p; color = c }
-}
+// LineVertex lives in SceneHelpers.swift (pure, harness-compiled)
+// with its layout constants derived from MemoryLayout. v0.2.3 and
+// earlier kept it here with a hand-written "offset 16, stride 32"
+// comment that did not match the type's real layout (48/32) — the
+// line-path twin of the v0.2.3 mesh bug, and the cause of the fan in
+// the v0.2.3 device verdict. See SceneHelpers.swift / FIXLOG v0.2.4.
 
 public final class CascadeRenderer: NSObject, ViewerBridge {
     public weak var delegate: ViewerBridgeDelegate?
@@ -131,9 +131,14 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
         lineDesc.attributes[0].offset = 0
         lineDesc.attributes[0].bufferIndex = 0
         lineDesc.attributes[1].format = .float4
-        lineDesc.attributes[1].offset = 16
+        // The line buffers hold [LineVertex] in its memory layout, so
+        // the descriptor declares THAT layout via the MemoryLayout-
+        // derived constants (48/32) — never hand-written numbers.
+        // v0.2.3 shipped 32/16 here: the GPU strode 32 bytes through
+        // 48-byte records and drew the fan (FIXLOG v0.2.4).
+        lineDesc.attributes[1].offset = LineVertex.bufferColorOffset
         lineDesc.attributes[1].bufferIndex = 0
-        lineDesc.layouts[0].stride = 32
+        lineDesc.layouts[0].stride = LineVertex.bufferStride
         lineDesc.layouts[0].stepFunction = .perVertex
         let ld = MTLRenderPipelineDescriptor()
         ld.vertexFunction = library.makeFunction(name: "lineVertex")
@@ -195,6 +200,13 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
     /// work on both platforms.
     public var faceLabelsEnabled: Bool = false
 
+    /// Edge-number labels (v0.2.4): when on, each census edge of each
+    /// visible object gets a text chip at its midpoint showing its
+    /// census edge index (MeshObject.edges' edgeIndex — the same
+    /// number `fillet/chamfer ... edges i,j,...` accepts). Default
+    /// off. Same iOS-only overlay note as face labels.
+    public var edgeLabelsEnabled: Bool = false
+
     public var objectIDs: [String] { store.order }
     public func props(id: String) -> ObjectDisplayProps? { store.entries[id]?.props }
     public var displayMode: DisplayMode { store.displayMode }
@@ -236,6 +248,14 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
             delegate?.viewer(self, measureDistanceChanged: nil)
         case .setFaceLabelsEnabled(let on):
             faceLabelsEnabled = on
+        case .setEdgeLabelsEnabled(let on):
+            edgeLabelsEnabled = on
+        case .setCameraRotation(let azimuthDeg, let elevationDeg):
+            store.camera.setRotation(azimuthDegrees: azimuthDeg,
+                                     elevationDegrees: elevationDeg)
+        case .rotateCameraBy(let dAzimuthDeg, let dElevationDeg):
+            store.camera.rotateBy(azimuthDegrees: dAzimuthDeg,
+                                  elevationDegrees: dElevationDeg)
         case .setGridVisible(let on):
             store.gridVisible = on
         case .setAxesVisible(let on):
@@ -285,63 +305,44 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
         if let existing = gpuObjects[id]?.edgeBuffer, let count = gpuObjects[id]?.edgeCount {
             return (existing, count)
         }
-        // Unique undirected edges of the triangle soup.
-        var seen = Set<UInt64>()
-        var lines: [LineVertex] = []
-        let edgeColor = SIMD4<Float>(0.08, 0.08, 0.09, 1)
-        var i = 0
-        while i + 2 < mesh.indices.count {
-            let tri = (mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2])
-            for (a, b) in [(tri.0, tri.1), (tri.1, tri.2), (tri.2, tri.0)] {
-                let key = UInt64(min(a, b)) << 32 | UInt64(max(a, b))
-                if seen.insert(key).inserted {
-                    lines.append(LineVertex(mesh.vertices[Int(a)].position, edgeColor))
-                    lines.append(LineVertex(mesh.vertices[Int(b)].position, edgeColor))
-                }
-            }
-            i += 3
-        }
+        // Unique undirected edges of the triangle soup (production
+        // builder in SceneHelpers.swift — the CI harness runs it).
+        let lines = SceneLineBuilder.meshEdgeLines(vertices: mesh.vertices,
+                                                   indices: mesh.indices)
         guard let buffer = device.makeBuffer(bytes: lines,
-                                             length: lines.count * 32,
+                                             length: lines.count * LineVertex.bufferStride,
                                              options: .storageModeShared) else { return nil }
         gpuObjects[id]?.edgeBuffer = buffer
         gpuObjects[id]?.edgeCount = lines.count
         return (buffer, lines.count)
     }
 
-    // MARK: Grid + axes (rebuilt only when scene bounds change)
+    // MARK: Grid + axes (rebuilt only when bounds or visibility change)
 
     private func rebuildGridIfNeeded() {
         guard let (lo, hi) = store.sceneBounds else { return }
-        let size = hi - lo
-        let extent = max(size.x, size.y, 10)
-        let key = "\(Int(extent))|\(Int(lo.x))|\(Int(lo.y))"
+        // The cache key covers EVERYTHING the built buffer depends on:
+        // the full bounds (grid extent + arrow length derive from
+        // them) and both visibility flags. Pre-v0.2.4 the key held
+        // only extent + lo.x/lo.y and the grid was built
+        // unconditionally, so `view grid off` changed nothing and
+        // toggling axes never rebuilt — the flags are in the key and
+        // gate the builders now.
+        let key = "\(store.gridVisible)|\(store.axesVisible)|\(lo.x)|\(lo.y)|\(lo.z)|\(hi.x)|\(hi.y)|\(hi.z)"
         if key == gridKey, gridBuffer != nil { return }
         gridKey = key
-        let step: Float = pow(10, floor(log10(extent / 5)))
-        let half = (extent * 1.2 / step).rounded() * step
-        let centre = store.sceneCentre
-        let gridGrey = SIMD4<Float>(0.35, 0.37, 0.40, 1)
         var lines: [LineVertex] = []
-        var v = -half
-        while v <= half {
-            lines.append(LineVertex(SIMD3<Float>(centre.x - half, centre.y + v, 0), gridGrey))
-            lines.append(LineVertex(SIMD3<Float>(centre.x + half, centre.y + v, 0), gridGrey))
-            lines.append(LineVertex(SIMD3<Float>(centre.x + v, centre.y - half, 0), gridGrey))
-            lines.append(LineVertex(SIMD3<Float>(centre.x + v, centre.y + half, 0), gridGrey))
-            v += step
+        if store.gridVisible {
+            lines += SceneLineBuilder.gridLines(lo: lo, hi: hi, centre: store.sceneCentre)
         }
         if store.axesVisible {
-            let len = half
-            let origin = SIMD3<Float>.zero
-            lines.append(LineVertex(origin, SIMD4<Float>(0.9, 0.25, 0.25, 1)))
-            lines.append(LineVertex(SIMD3<Float>(len, 0, 0), SIMD4<Float>(0.9, 0.25, 0.25, 1)))
-            lines.append(LineVertex(origin, SIMD4<Float>(0.25, 0.85, 0.35, 1)))
-            lines.append(LineVertex(SIMD3<Float>(0, len, 0), SIMD4<Float>(0.25, 0.85, 0.35, 1)))
-            lines.append(LineVertex(origin, SIMD4<Float>(0.3, 0.45, 0.95, 1)))
-            lines.append(LineVertex(SIMD3<Float>(0, 0, len), SIMD4<Float>(0.3, 0.45, 0.95, 1)))
+            // Compact arrows at the origin (v0.2.4), ~20% of the
+            // scene diagonal — NOT the old full-length lines, which
+            // ran 1.2x the scene extent and crossed the model.
+            lines += SceneLineBuilder.axisArrowLines(
+                diagonal: SceneLineBuilder.sceneDiagonal(lo: lo, hi: hi))
         }
-        gridBuffer = device.makeBuffer(bytes: lines, length: lines.count * 32,
+        gridBuffer = device.makeBuffer(bytes: lines, length: lines.count * LineVertex.bufferStride,
                                        options: .storageModeShared)
         gridCount = lines.count
     }
@@ -442,7 +443,7 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
             var lu = LineUniforms(mvp: viewProjection)
             encoder.setRenderPipelineState(linePipeline)
             encoder.setDepthStencilState(depthStateNoWrite)
-            encoder.setVertexBytes(pts, length: pts.count * 32, index: 0)
+            encoder.setVertexBytes(pts, length: pts.count * LineVertex.bufferStride, index: 0)
             encoder.setVertexBytes(&lu, length: MemoryLayout<LineUniforms>.stride, index: 1)
             encoder.drawPrimitives(type: .line, vertexStart: 0, vertexCount: 2)
         }
@@ -536,6 +537,7 @@ extension CascadeRenderer: MTKViewDelegate {
         commandBuffer.present(drawable)
         commandBuffer.commit()
         updateFaceLabels(in: view, viewProjection: vp)
+        updateEdgeAndAxisLabels(in: view, viewProjection: vp)
     }
 }
 
@@ -638,6 +640,106 @@ extension CascadeRenderer {
                                  width: CGFloat(width), height: 22)
         }
         labelLayers = layers
+    }
+}
+
+// MARK: - Edge-number labels + axis letters (v0.2.4)
+//
+// Same chip mechanism as the face labels, separate layer pool.
+// Edge chips: black text on near-white, anchored at each census
+// edge's midpoint (MeshObject.edges — the backend's own census from
+// ccgeom_edge_list, so the number IS the `edges i,j,...` index).
+// Facing: an edge has no single normal in the view data, so the test
+// is radial — the chip shows when the midpoint's direction from the
+// object's centre faces the camera (dot > 0.05). That is an
+// approximation (a long edge can straddle the silhouette); it is the
+// honest limit of endpoint-only data and is recorded in FIXLOG.
+// Anchors are mesh-space, like the face labels (exact at explode 0).
+// Axis chips: the letters X / Y / Z at the arrow tips, black text on
+// the axis colour, shown whenever the arrows are (view axes on).
+
+private var edgeLabelStorage: [ObjectIdentifier: [String: CATextLayer]] = [:]
+
+extension CascadeRenderer {
+    private var edgeLabelLayers: [String: CATextLayer] {
+        get { edgeLabelStorage[ObjectIdentifier(self)] ?? [:] }
+        set { edgeLabelStorage[ObjectIdentifier(self)] = newValue }
+    }
+
+    func updateEdgeAndAxisLabels(in view: MTKView, viewProjection vp: float4x4) {
+        var layers = edgeLabelLayers
+        let bounds = view.bounds
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let host = view.layer
+        let eye = store.camera.eyePosition
+        var wanted: [String: (text: String, screen: CGPoint, bg: CGColor)] = [:]
+
+        func project(_ anchor: SIMD3<Float>) -> CGPoint? {
+            let clip = vp * SIMD4<Float>(anchor.x, anchor.y, anchor.z, 1)
+            guard clip.w > 0 else { return nil }
+            let ndc = SIMD3<Float>(clip.x / clip.w, clip.y / clip.w, clip.z / clip.w)
+            guard ndc.z <= 1, abs(ndc.x) <= 1.1, abs(ndc.y) <= 1.1 else { return nil }
+            return CGPoint(x: CGFloat(ndc.x * 0.5 + 0.5) * bounds.width,
+                           y: CGFloat(1 - (ndc.y * 0.5 + 0.5)) * bounds.height)
+        }
+
+        if edgeLabelsEnabled {
+            for id in store.order {
+                guard let entry = store.entries[id], entry.props.isVisible else { continue }
+                let mesh = entry.mesh
+                for edge in mesh.edges {
+                    let anchor = (edge.start + edge.end) / 2
+                    let outward = anchor - mesh.centre
+                    let viewDir = eye - anchor
+                    guard simd_length(outward) > 1e-6, simd_length(viewDir) > 1e-6,
+                          simd_dot(simd_normalize(outward), simd_normalize(viewDir)) > 0.05
+                    else { continue }
+                    guard let screen = project(anchor) else { continue }
+                    wanted["\(id)#e\(edge.edgeIndex)"] =
+                        (text: "\(edge.edgeIndex)", screen: screen,
+                         bg: UIColor.white.withAlphaComponent(0.92).cgColor)
+                }
+            }
+        }
+
+        if store.axesVisible, let (lo, hi) = store.sceneBounds {
+            let diagonal = SceneLineBuilder.sceneDiagonal(lo: lo, hi: hi)
+            for tipInfo in SceneLineBuilder.axisArrowTips(diagonal: diagonal) {
+                guard let screen = project(tipInfo.tip) else { continue }
+                let c = tipInfo.color
+                wanted["axis:\(tipInfo.label)"] =
+                    (text: tipInfo.label, screen: screen,
+                     bg: UIColor(red: CGFloat(c.x), green: CGFloat(c.y),
+                                 blue: CGFloat(c.z), alpha: 0.95).cgColor)
+            }
+        }
+
+        for (key, layer) in layers where wanted[key] == nil {
+            layer.removeFromSuperlayer()
+            layers[key] = nil
+        }
+        let font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        for (key, item) in wanted {
+            let layer = layers[key] ?? {
+                let l = CATextLayer()
+                l.alignmentMode = .center
+                l.cornerRadius = 4
+                l.contentsScale = view.contentScaleFactor
+                host.addSublayer(l)
+                layers[key] = l
+                return l
+            }()
+            layer.string = item.text
+            layer.font = font
+            layer.fontSize = 14
+            layer.foregroundColor = UIColor.black.cgColor
+            layer.backgroundColor = item.bg
+            let width = max(22, 12 + 9 * item.text.count)
+            layer.frame = CGRect(x: item.screen.x - CGFloat(width) / 2,
+                                 y: item.screen.y - 11,
+                                 width: CGFloat(width), height: 22)
+        }
+        edgeLabelLayers = layers
     }
 }
 #endif

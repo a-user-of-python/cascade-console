@@ -88,6 +88,9 @@ public enum ViewerCommand: Equatable {
     case setBackground(top: SIMD4<Float>, bottom: SIMD4<Float>)
     case setProjection(ProjectionMode)
     case setFaceLabelsEnabled(Bool)     // face-number labels (v0.2)
+    case setEdgeLabelsEnabled(Bool)     // edge-number labels (v0.2.4)
+    case setCameraRotation(azimuthDegrees: Float, elevationDegrees: Float)  // view rotate (v0.2.4)
+    case rotateCameraBy(azimuthDegrees: Float, elevationDegrees: Float)     // view rotate by (v0.2.4)
     case setObjectVisible(id: String, Bool)
     case setObjectOpacity(id: String, Float)
     case setObjectColor(id: String, SIMD4<Float>)
@@ -132,6 +135,11 @@ public protocol ViewerBridge: AnyObject {
     /// Face-number labels on/off (default off). The numbers are the
     /// census face indices carried in MeshObject.faceGroups.
     var faceLabelsEnabled: Bool { get set }
+
+    /// Edge-number labels on/off (default off, v0.2.4). The numbers
+    /// are the census edge indices carried in MeshObject.edges — the
+    /// indices `fillet/chamfer ... edges i,j,...` accept.
+    var edgeLabelsEnabled: Bool { get set }
 
     // Live view state, for the console's `view status` report
     var displayMode: DisplayMode { get }

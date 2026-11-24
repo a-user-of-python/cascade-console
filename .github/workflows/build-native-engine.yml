@@ -174,14 +174,18 @@ jobs:
           MATRIX_TMP="$(mktemp -d)"
           ./build/test_matrix_mc "$MATRIX_TMP" Core/scripts/demo.ccs
 
-      # Swift viewer harness (v0.2.3): the first gate that EXECUTES
-      # the production Swift viewer-feed code. The fixture is the
-      # mc backend's own cc_view_data output (device path); the
-      # harness binary is compiled from the production Swift sources
-      # (MeshBuffer, EngineMeshAdapter, EngineProtocol, SharedModels)
-      # plus the harness main, and asserts the geometry survives the
-      # adapter + loader AND the renderer's GPU vertex-layout
-      # contract (the stride bug that shipped the v0.2.2 fan).
+      # Swift viewer harness (v0.2.3, extended v0.2.4): the gate that
+      # EXECUTES the production Swift viewer code. The fixture is the
+      # mc backend's own cc_view_data output (device path, CCFX v2
+      # with census edges); the harness binary is compiled from the
+      # production Swift sources (MeshBuffer, EngineMeshAdapter,
+      # EngineProtocol, SharedModels, SceneHelpers, ViewCommands,
+      # ViewerBridge, Camera, SceneStore) plus the harness main, and
+      # asserts the geometry survives the adapter + loader AND the
+      # renderer's GPU vertex-layout contracts — mesh (the v0.2.2
+      # fan) and line (the v0.2.3 fan: LineVertex stride 48/offset 32
+      # vs the shipped 32/16) — plus the v0.2.4 line builders, edge
+      # round-trip, and view rotate / labels-edges parsing + camera.
       - name: Generate view-data fixture (mc backend)
         run: |
           clang++ -std=c++17 -O2 \
@@ -198,6 +202,11 @@ jobs:
           xcrun swiftc -O \
             Shared/Viewer/Swift/MeshBuffer.swift \
             Shared/Viewer/Swift/EngineMeshAdapter.swift \
+            Shared/Viewer/Swift/SceneHelpers.swift \
+            Shared/Viewer/Swift/ViewCommands.swift \
+            Shared/Viewer/Swift/ViewerBridge.swift \
+            Shared/Viewer/Swift/Camera.swift \
+            Shared/Viewer/Swift/SceneStore.swift \
             Shared/Engine/EngineProtocol.swift \
             Shared/Models/SharedModels.swift \
             Shared/Viewer/Verification/swift-harness/main.swift \
