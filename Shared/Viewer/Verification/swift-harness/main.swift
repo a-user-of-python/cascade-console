@@ -398,7 +398,22 @@ if let boxMesh = meshes.first(where: { $0.id == "test" }) {
            overlay[i + 1].color != SceneLineBuilder.edgeOverlayColor { overlayColorsOK = false }
         i += 2
     }
-    check(got == want, "edge overlay: segment endpoint set == the box's 12 geometric edges")
+    // The overlay is built from the UNWELDED mesh (one vertex per
+    // triangle corner), so its distinct position pairs are the 12
+    // geometric edges PLUS one triangulation diagonal per face —
+    // 18 pairs, not 12. (The census edges in MeshObject.edges are
+    // the backend's true 12; the overlay is a triangle-soup view.)
+    let quads = [(0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4),
+                 (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    var allowed = want
+    for q in quads {
+        for (a, b) in [(q.0, q.2), (q.1, q.3)] {
+            let ka = key(corners[a]), kb = key(corners[b])
+            allowed.insert(ka < kb ? "\(ka)|\(kb)" : "\(kb)|\(ka)")
+        }
+    }
+    check(got.count == 18 && want.isSubset(of: got) && got.isSubset(of: allowed),
+          "edge overlay: distinct segment pairs == 12 geometric edges + 6 face diagonals (got \(got.count))")
     check(overlayColorsOK, "edge overlay: every vertex carries the overlay colour")
     check(rereadLines(overlay) == overlay,
           "edge overlay: vertices re-read exact through the line layout")
