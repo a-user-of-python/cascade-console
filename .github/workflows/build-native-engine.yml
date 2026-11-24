@@ -7,9 +7,11 @@ name: Native engine
 # against OCCT 8.0.1 locally; see Core/native tests.)
 # Job 2 (macos): compile-check ONLY of the device backend adapter
 # (ccgeom_mc.cpp) against the real cascade-port facade header from the
-# cascade-ios repo. Linking CascadeKit + building the apps with
-# CASCADE_NATIVE_ENGINE defined is the NEXT step (see the engine
-# report); this job deliberately does not claim it.
+# cascade-ios repo.
+# Job 3 (macos): the v0.2.1 ship gate — CascadeKit built for the host
+# from the same pinned checkout + facade patch, the app's five engine
+# objects linked against it, and the per-command matrix + view-data
+# smoke RUN against the real mc backend (see the job's own comment).
 
 on:
   workflow_dispatch:
@@ -58,3 +60,110 @@ jobs:
             -Icascade-port-src/Facade \
             -c Core/native/src/ccgeom_mc.cpp -o /tmp/ccgeom_mc.o
           echo "ccgeom_mc.cpp compiles against cascade-port occt_facade.h"
+
+  # Job 3 (macos): the v0.2.1 SHIP GATE — per-command matrix on the
+  # REAL device code path. Builds CascadeKit for the HOST from the
+  # same pinned cascade-ios checkout + the same CI facade patch the
+  # IPA build uses, links the same five engine objects the app links
+  # (cc_interpreter + ccgeom_mc + ccsim + ccsim_commands +
+  # ccsim_backend_mc), and runs:
+  #   - tests/test_view_data_mc.cpp  (cc_view_data invariants)
+  #   - tests/test_matrix_mc.cpp     (every advertised command,
+  #     driven through cc_execute with a real invariant per command)
+  # v0.2 shipped with this path never run end-to-end (empty view
+  # data; export-stl untested on the mc backend). This job exists so
+  # that class of failure cannot ship again: the IPA gate requires
+  # this job green on the same HEAD.
+  mc-backend-matrix:
+    name: Device-path per-command matrix (mc backend)
+    runs-on: macos-26
+    env:
+      CASCADE_IOS_SHA: 061875afb5384227db5f39cba81266cf889257a4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch cascade-port (CascadeKit) at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: a-user-of-python/cascade-ios
+          ref: ${{ env.CASCADE_IOS_SHA }}
+          path: cascade-port-src
+
+      - name: Inject mc_additions into the cascade-port checkout
+        run: python3 Core/native/ci/patch_cascade_port.py cascade-port-src
+
+      - name: Restore cached CascadeKit host library
+        id: kitcache
+        uses: actions/cache@v4
+        with:
+          path: build/kitlib-host
+          key: cascadekit-host-${{ env.CASCADE_IOS_SHA }}-${{ hashFiles('Core/native/ci/patch_cascade_port.py') }}-v1
+
+      - name: Build CascadeKit host library (OCCT + mc_* facade, direct clang)
+        if: steps.kitcache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          # Same sources, defines and include layout as the IPA job's
+          # kit build, but compiled for the macOS host so the matrix
+          # binaries can RUN here. (build-ipa.yml targets iphoneos;
+          # the geometry code is identical.)
+          cd "$GITHUB_WORKSPACE/cascade-port-src"
+          mkdir -p "$GITHUB_WORKSPACE/build/kitobj-host" "$GITHUB_WORKSPACE/build/kitlib-host"
+          INC="-IFacade -IOCCT/generated"
+          while IFS= read -r d; do INC="$INC -I$d"; done < <(find OCCT/src -type d | sort)
+          find OCCT/src -name '*.cxx' -o -name '*.cpp' -o -name '*.c' > "$GITHUB_WORKSPACE/build/kitobj-host/sources.txt"
+          echo "Facade/occt_facade.cpp" >> "$GITHUB_WORKSPACE/build/kitobj-host/sources.txt"
+          wc -l "$GITHUB_WORKSPACE/build/kitobj-host/sources.txt"
+          export INC GITHUB_WORKSPACE
+          compile_one() {
+            src="$1"
+            obj="$GITHUB_WORKSPACE/build/kitobj-host/$(printf '%s' "$src" | md5 -q).o"
+            case "$src" in
+              *.c) clang -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+              *)   clang++ -std=gnu++17 -O1 -w \
+                     -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS -DNDEBUG \
+                     $INC -c "$src" -o "$obj" ;;
+            esac
+          }
+          export -f compile_one
+          xargs -P "$(sysctl -n hw.ncpu)" -I SRC bash -c 'compile_one "$@"' _ SRC \
+            < "$GITHUB_WORKSPACE/build/kitobj-host/sources.txt"
+          ar rcs "$GITHUB_WORKSPACE/build/kitlib-host/libCascadeKitHost.a" "$GITHUB_WORKSPACE/build/kitobj-host"/*.o
+          ls -la "$GITHUB_WORKSPACE/build/kitlib-host/"
+
+      - name: Build Layer-2 engine objects (same five sources as the app link)
+        run: |
+          mkdir -p build/engine-host
+          for src in cc_interpreter ccgeom_mc ccsim ccsim_commands ccsim_backend_mc; do
+            clang++ -std=c++17 -O2 \
+              -ICore/native/include -ICore/native/src \
+              -Icascade-port-src/Facade \
+              -c "Core/native/src/$src.cpp" -o "build/engine-host/$src.o"
+          done
+          ar rcs build/engine-host/libCascadeConsoleEngineHost.a build/engine-host/*.o
+          nm build/engine-host/libCascadeConsoleEngineHost.a | grep -E "cc_execute|mc_clone_shape" || true
+
+      - name: Build + run view-data smoke (mc backend)
+        run: |
+          clang++ -std=c++17 -O2 \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            Core/native/tests/test_view_data_mc.cpp \
+            build/engine-host/libCascadeConsoleEngineHost.a \
+            build/kitlib-host/libCascadeKitHost.a \
+            -lc++ -o build/test_view_data_mc
+          ./build/test_view_data_mc
+
+      - name: Build + run per-command matrix (mc backend)
+        run: |
+          clang++ -std=c++17 -O2 \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            Core/native/tests/test_matrix_mc.cpp \
+            build/engine-host/libCascadeConsoleEngineHost.a \
+            build/kitlib-host/libCascadeKitHost.a \
+            -lc++ -o build/test_matrix_mc
+          MATRIX_TMP="$(mktemp -d)"
+          ./build/test_matrix_mc "$MATRIX_TMP" Core/scripts/demo.ccs

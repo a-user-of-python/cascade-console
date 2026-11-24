@@ -1192,7 +1192,7 @@ OCCT is organised in modules → toolkits (libraries, `TK*`) → packages → cl
 #### `export-step`
 - Syntax: `export-step <shape> <file> [ap242|ap214|ap203] [units mm|in] [colours]`
 - OCCT: `STEPControl_Writer / STEPCAFControl_Writer` — toolkit `TKDESTEP/TKXCAF`
-- What it does: Export STEP with schema and unit choice; colours/names need the XDE writer.
+- What it does: Export STEP with schema and unit choice; colours/names need the XDE writer. In the apps, a bare file name (no directory) is written into the app's Documents folder; a path with a directory component is used as given.
 - Example: `export-step body1 out.step ap242 colours`
 
 #### `import-iges`
@@ -1246,7 +1246,7 @@ OCCT is organised in modules → toolkits (libraries, `TK*`) → packages → cl
 #### `export-stl`
 - Syntax: `export-stl <shape> <file> [ascii|binary] [deflection <d>]`
 - OCCT: `StlAPI_Writer` — toolkit `TKDESTL`
-- What it does: Export STL, tessellating first with the given deflection.
+- What it does: Export STL, tessellating first with the given deflection. In the apps, a bare file name (no directory) is written into the app's Documents folder; a path with a directory component is used as given.
 - Example: `export-stl body1 out.stl binary deflection 0.1`
 
 #### `import-obj`
@@ -1532,9 +1532,9 @@ OCCT is organised in modules → toolkits (libraries, `TK*`) → packages → cl
 ### Viewing (app layer, OCCT-fed) (7)
 
 #### `view`
-- Syntax: `view <name> [fit]`
+- Syntax: `view [<name>] [fit]`
 - OCCT: `— app viewer (Metal tessellation from BRepMesh_IncrementalMesh)` — toolkit `TKMesh (source data)`
-- What it does: Show the named shape in the 3D viewer. The viewer is the app's, not OCCT's AIS/OpenGL — OCCT supplies the triangulation.
+- What it does: Show the named shape in the 3D viewer; bare `view` shows every shape. The viewer is the app's, not OCCT's AIS/OpenGL — OCCT supplies the triangulation. All `view ...` lines are handled by the app layer and never reach the engine (the engine's own `view <path.json>` form is a host-debug command, not an app command).
 - Example: `view body1`
 
 #### `view-all`

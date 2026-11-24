@@ -101,27 +101,129 @@ final class AppState: ObservableObject {
             loadScriptFromDocuments(command: command)
             return
         }
-        if verb == "view", let renderer,
-           case .success(let viewCommand) = ViewCommandParser.parse(command) {
-            // Viewer commands (fit / standard views / display modes /
-            // labels / section / ...) belong to the renderer, not the
-            // engine. Anything the parser rejects — notably the
-            // engine's own `view <path.json> [name]` form — falls
-            // through to the engine unchanged.
-            renderer.apply(viewCommand)
-            appendLog(.info, "view: applied to the 3D viewer.")
+        if verb == "view" {
+            // `view` lines are app-layer commands and NEVER reach the
+            // engine (v0.2.1 fix). In v0.2 the parser rejected
+            // `view <name>` and the line fell through to the engine,
+            // whose own `view` is the host-debug `view <path.json>`
+            // form — it treated the object name as a file path and
+            // failed writing to the app sandbox's working directory
+            // ("Could not write view data to 'test'.").
+            handleViewCommand(command)
             return
         }
 
+        // Export commands: the engine writes to the path it is given,
+        // and on device a bare relative file name resolves against
+        // the process working directory — not writable, and not the
+        // Documents folder the user can browse (the v0.2
+        // `export-stl test test.stl` failure). The app layer owns
+        // device file paths: rewrite a bare name into Documents.
+        let routed = (verb == "export" || verb == "export-step" || verb == "export-stl")
+            ? routeExportToDocuments(command)
+            : (line: command, rewroteToDocuments: false)
+
         isRunning = true
         Task { @MainActor in
-            let result = await engine.execute(command: command)
-            apply(result)
+            let result = await engine.execute(command: routed.line)
+            if routed.rewroteToDocuments && !result.isError {
+                // Name the saved location the way the user can find
+                // it: Documents/... instead of the sandbox path.
+                let docsPrefix = fileStore.documentsURL.path + "/"
+                let display = result.output.replacingOccurrences(
+                    of: docsPrefix, with: "Documents/")
+                apply(result, displayOutput: display)
+            } else {
+                apply(result)
+            }
             if !result.isError {
-                await refreshScene(fit: verb == "view")
+                await refreshScene(fit: false)
             }
             isRunning = false
         }
+    }
+
+    // MARK: - View commands (app layer)
+
+    /// Handles every `view ...` line in the app layer:
+    /// (a) ViewCommandParser subcommands (fit / standard views /
+    ///     display modes / labels / section / ...) go to the renderer;
+    /// (b) `view <name>` / `view <name> fit` for an existing session
+    ///     object selects it and refreshes the scene;
+    /// (c) `view <name>` for a nonexistent name is a clear console
+    ///     error, not an engine error;
+    /// (d) bare `view` shows everything;
+    /// (e) anything else is a console usage error. The engine's
+    ///     host-debug `view <path.json>` form stays available to the
+    ///     host CLI/tests only — the app never forwards `view` lines.
+    private func handleViewCommand(_ command: String) {
+        if case .success(let viewCommand) = ViewCommandParser.parse(command) {
+            if let renderer {
+                renderer.apply(viewCommand)
+                appendLog(.info, "view: applied to the 3D viewer.")
+            } else {
+                appendLog(.error, "view: the 3D view is unavailable on this device (no Metal device).")
+            }
+            return
+        }
+        let tokens = command.split(separator: " ").map(String.init)
+        if tokens.count == 1 {
+            Task { @MainActor in await refreshScene(fit: true) }
+            appendLog(.info, "Showing all objects.")
+            return
+        }
+        let isNameForm = tokens.count == 2
+            || (tokens.count == 3 && tokens[2].lowercased() == "fit")
+        if isNameForm {
+            let name = tokens[1]
+            Task { @MainActor in
+                let names: [String]
+                if let provider = engine as? EngineViewDataProviding {
+                    names = await provider.objectNames()
+                } else {
+                    names = objects.map { $0.shapeID }
+                }
+                guard names.contains(name) else {
+                    appendLog(.error, "view: no object named '\(name)'.")
+                    return
+                }
+                await refreshScene(fit: true)
+                if let item = objects.first(where: { $0.shapeID == name }) {
+                    selectedObjectID = item.id
+                }
+                appendLog(.info, "Showing '\(name)'.")
+            }
+            return
+        }
+        appendLog(.error, "view: unrecognized view command. Try 'view', 'view <name>', 'view fit', 'view iso', 'view labels faces on'.")
+    }
+
+    // MARK: - Export path routing (app layer)
+
+    /// Rewrites the target of an export command into the app's
+    /// Documents folder when — and only when — the user gave a bare
+    /// file name (no directory component). A path with any directory
+    /// component, relative or absolute, is the user's explicit choice
+    /// and passes through unchanged. Grammar (engine's own):
+    /// `export-step <shape> <file>`, `export-stl <shape> <file>`,
+    /// `export step|stl <path> [name]` — the path is token 2 in all
+    /// three forms. The engine's multi-target `_<name>` insertion
+    /// operates on the rewritten absolute path, so per-object files
+    /// still land in Documents.
+    private func routeExportToDocuments(_ command: String)
+        -> (line: String, rewroteToDocuments: Bool) {
+        var tokens = command.split(separator: " ").map(String.init)
+        guard tokens.count > 2 else { return (command, false) }
+        if tokens[0].lowercased() == "export" {
+            let kind = tokens[1].lowercased()
+            guard kind == "step" || kind == "stl" else { return (command, false) }
+        }
+        let target = tokens[2]
+        guard !target.hasPrefix("/"), !target.contains("/") else {
+            return (command, false)
+        }
+        tokens[2] = fileStore.documentsURL.appendingPathComponent(target).path
+        return (tokens.joined(separator: " "), true)
     }
 
     func runScript(_ script: String) {
@@ -133,11 +235,11 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func apply(_ result: CommandResult) {
+    private func apply(_ result: CommandResult, displayOutput: String? = nil) {
         if result.isError {
             appendLog(.error, result.output)
         } else {
-            appendLog(.output, result.output)
+            appendLog(.output, displayOutput ?? result.output)
         }
         // Shared CommandResult carries session names only; in the
         // Layer-2 design the session name IS the shape handle (shapeID).
@@ -164,7 +266,14 @@ final class AppState: ObservableObject {
         guard let provider = engine as? EngineViewDataProviding,
               let renderer else { return }
         let names = await provider.objectNames()
-        let viewObjects = await provider.viewData(name: nil)
+        let feed = await provider.viewData(name: nil)
+        if let message = feed.errorMessage {
+            appendLog(.error, "Viewer feed failed: \(message)")
+        }
+        let viewObjects = feed.objects
+        if !names.isEmpty && viewObjects.isEmpty && feed.errorMessage == nil {
+            appendLog(.error, "Viewer feed: the session has \(names.count) object(s) but the engine returned no view data — the 3D view will be empty.")
+        }
 
         let nameSet = Set(names)
         objects.removeAll { !nameSet.contains($0.shapeID) }
@@ -187,6 +296,9 @@ final class AppState: ObservableObject {
                 var props = ObjectDisplayProps()
                 props.isVisible = visible
                 renderer.loadMesh(mesh, props: props)
+            }
+            if !viewObjects.isEmpty && meshes.isEmpty {
+                appendLog(.error, "Viewer feed: the engine returned \(viewObjects.count) object(s) with no triangles to render.")
             }
             if fit && !meshes.isEmpty {
                 renderer.apply(.fit)

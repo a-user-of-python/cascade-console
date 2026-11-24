@@ -30,6 +30,22 @@ specified in `docs/EXTRAS.md`, with host-prototype numbers in
 
 ## Honest status
 
+**v0.2.1 (2026-11-23): device-feedback fixes, gated by a
+per-command test matrix on the real device code path.** The user's
+iPad test of v0.2 found the viewer rendering nothing and
+`view <name>` / console export failing. Root causes: the mc
+backend read tessellation counts after `mc_free_mesh()` had zeroed
+them (empty view data); `view` lines fell through to the engine's
+host-debug file-writing form; export paths were resolved against
+the unwritable process working directory instead of Documents.
+v0.2.1 fixes all three, and adds a CI job
+(`mc-backend-matrix` in `build-native-engine.yml`) that builds
+CascadeKit from the same pinned checkout and runs every advertised
+command through the real mc backend with a real invariant per
+command — the class of failure that shipped in v0.2 cannot pass
+that job. See `FIXLOG.md` for the full v0.2.1 record. The Mac app
+remains on the stub engine (below).
+
 **v0.2 (2026-11-23): the native engine is linked into the iPad
 build.** The C++ Layer-2 session interpreter (`Core/native/`, a port
 of the host-proven Python reference — 90/90 host tests on real OCCT

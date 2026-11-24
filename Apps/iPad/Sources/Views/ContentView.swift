@@ -45,6 +45,10 @@ struct ContentView: View {
                 showingWelcome = true
                 welcomeShown = true
             }
+            // Feed the viewport on appearance too, so objects created
+            // before the view attached (e.g. by a script run from the
+            // Files tab) still render without another command.
+            Task { await state.refreshScene(fit: false) }
         }
         .onChange(of: scenePhase) {
             // Autosave (Settings) = save the script buffer whenever the

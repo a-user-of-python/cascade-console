@@ -467,3 +467,113 @@ catalog.json, default.metallib and BOTH OCCT licence texts.
   job succeeds, so fix-loop iterations each paid the ~55-70 min kit
   build. Splitting the kit into its own workflow would fix that;
   left as-is for v0.2.
+
+## v0.2.1 — device-feedback fixes (2026-11-23)
+
+The user's iPad test of v0.2 (object "test" in the sidebar) showed
+three defects, all in the family "proven on the host OCCT backend,
+never run on the device mc backend / device environment":
+
+1. **Viewer renders nothing; viewport says "0 object(s)"** although
+   the session holds the object. ROOT CAUSE (in
+   `Core/native/src/ccgeom_mc.cpp`): `ccgeom_tessellate` and
+   `ccgeom_face_ranges` copied the mesh arrays out of
+   `mc_tessellate`'s result and then read `mesh.vertexCount` /
+   `mesh.triangleCount` / `mesh.faceCount` AFTER calling
+   `mc_free_mesh(&mesh)` — and the facade's `mc_free_mesh` frees the
+   arrays and then memsets the whole `MCFacadeMesh` struct to zero
+   (cascade-port `Facade/occt_facade.cpp`). Every count therefore
+   came back 0: `cc_view_data` returned each object with 0 vertices
+   / 0 triangles / 0 face ranges, `EngineMeshAdapter` skipped it
+   (it requires >= 3 indices), and the renderer honestly reported
+   an empty scene. FIX: capture the three counts BEFORE
+   `mc_free_mesh`, in both functions, with the rule commented at
+   both sites. Additionally, the failure is no longer silent:
+   `EngineViewDataProviding.viewData` now returns an
+   `EngineViewDataResult` whose `errorMessage` carries the
+   session's `cc_last_error` text, AppState logs
+   "Viewer feed failed: ..." plus diagnostics when the session has
+   objects but no view data arrived, and ContentView refreshes the
+   scene when the viewport appears.
+2. **`view test` -> red error "Could not write view data to
+   'test'."** ROOT CAUSE (app layer): `ViewCommandParser` has no
+   object-name case, so `view <name>` fell through AppState's
+   dispatch to the engine, whose `view` is the host-debug grammar
+   `view <path.json> [name] [deflection]` — it treated "test" as a
+   file path and its `std::ofstream` failed in the app sandbox.
+   FIX (iPad `AppState.handleViewCommand`; the Mac AppState gets
+   the same interception — its stub engine silently swallowed
+   these lines): a `view` line NEVER reaches the engine now.
+   Parser subcommands go to the renderer as before; `view <name>`
+   / `view <name> fit` select an existing session object and
+   refresh ("Showing '<name>'."); an unknown name is a clear
+   console error ("view: no object named '<name>'."); bare `view`
+   shows everything. The engine's host-debug form stays in the
+   interpreter for the host CLI/tests only.
+3. **`export-stl test test.stl` -> "mc_export_stl: writer did not
+   complete"** (and any console export with a bare file name).
+   ROOT CAUSE (app layer owns device file paths): AppState did not
+   intercept export commands, so the engine received the raw
+   relative path and wrote against the process working directory —
+   not writable under the iOS sandbox, and not Documents. The
+   writer itself is sound: OCCT 8.0.1's `StlAPI_Writer::Write`
+   returns false only when the output stream cannot be opened or
+   the shape has zero triangulation, and the CI-injected
+   `mc_export_stl` meshes first via `BRepMesh_IncrementalMesh`,
+   whose parameterized constructor calls `Perform()` (both facts
+   read in the OCCT sources). The per-command matrix below proves
+   the same injected `mc_export_stl` writes a valid ASCII STL to a
+   writable path, and that an unwritable path fails honestly with
+   EXPORT_FAILED. FIX (iPad `AppState.routeExportToDocuments`):
+   `export` / `export-step` / `export-stl` lines whose target is a
+   bare file name are rewritten to the app's Documents folder
+   before the engine call, and the console result is displayed with
+   the Documents/ prefix so the user can find the file in the
+   in-app browser; the engine's multi-target `_<name>` insertion
+   operates on the rewritten absolute path, so per-object files
+   land in Documents too. Paths with a directory component pass
+   through unchanged. Mac export is deliberately unchanged: the
+   Mac engine is still the Swift stub, which writes no files at
+   all, so there is no path to route until the Mac native-engine
+   pass lands.
+
+**New ship gate (the user's requirement: "a test on each command
+before you give me the next version").** New job
+`mc-backend-matrix` in `.github/workflows/build-native-engine.yml`
+builds CascadeKit for the host from the SAME pinned cascade-ios
+checkout + the SAME CI facade patch as the IPA build, links the
+SAME five engine objects the app links, and runs two binaries:
+`Core/native/tests/test_view_data_mc.cpp` (cc_view_data
+invariants: counts > 0, indices in range, face ranges
+census-ordered and partitioning the index buffer, centroids at
+true face centres) and `Core/native/tests/test_matrix_mc.cpp` —
+every command in `NativeEngine.knownCommands` driven through
+`cc_execute` with a real invariant per command (analytic primitive
+volumes; boolean volume arithmetic; fillet/chamfer in the
+host-proven bands and exact values; transform bbox assertions;
+session-state assertions for copy/duplicate/rename/delete/list/
+info/clear; set/show-vars; undo/redo/history; echo/help output;
+shape-history == E5002 by design; `run` on a script file; export
+files verified on disk — STEP carries ISO-10303-21, STL is ASCII
+with facet records, multi-target files land per object; engine
+`view` JSON reports triangleCount > 0; the sim subset solves a
+box cantilever whose root/tip faces are discovered from the
+census centroids, max displacement within 5% of Euler-Bernoulli
+at two mesh sizes; sim modal == E5002). Local pre-CI proof on this
+machine (patched facade from the local cascade-port tree + conda
+OCCT 8.0.1): matrix 117 pass / 0 fail, smoke 18 pass / 0 fail —
+CI on the pinned checkout is the deciding run, recorded below.
+
+**Investigated, NOT a bug:** the console showed "Saved
+sample-project.cascade to Documents." four times in a row. That
+line is only produced by `AppState.saveBuffer()`, whose callers are
+the explicit Save buttons and ContentView's scenePhase autosave
+(save the buffer when the app leaves the foreground, when the
+autosave setting is on). First-launch seeding uses
+`FileStore.seedIfMissing`, which never logs that line and is
+gated by a UserDefaults flag. Four identical lines = the app was
+backgrounded four times with sample-project.cascade as the current
+file (e.g. while taking/sharing screenshots); each backgrounding
+re-saves the same buffer, harmlessly. No code change.
+
+Version: MARKETING_VERSION 0.2.1, CURRENT_PROJECT_VERSION 3.

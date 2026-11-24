@@ -121,9 +121,26 @@ public struct EngineViewObject: Equatable {
     }
 }
 
+/// Result of a view-data pull: the tessellated objects, plus the
+/// engine's own error message when the pull failed. v0.2 returned a
+/// bare array and NativeEngine silently mapped every cc_view_data
+/// failure to [], so a broken viewer feed looked exactly like an
+/// empty scene in the console. Failures are now data AppState logs
+/// ("Viewer feed failed: ...") instead of silence.
+public struct EngineViewDataResult {
+    public var objects: [EngineViewObject]
+    public var errorMessage: String?
+    public init(objects: [EngineViewObject], errorMessage: String? = nil) {
+        self.objects = objects
+        self.errorMessage = errorMessage
+    }
+}
+
 public protocol EngineViewDataProviding: AnyObject {
     /// Session object names, in session order.
     func objectNames() async -> [String]
     /// Tessellation for one object, or every object when `name` is nil.
-    func viewData(name: String?) async -> [EngineViewObject]
+    /// A failed pull returns empty `objects` WITH `errorMessage` set —
+    /// never a silent empty result.
+    func viewData(name: String?) async -> EngineViewDataResult
 }

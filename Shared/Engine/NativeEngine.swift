@@ -104,16 +104,31 @@ public final class NativeEngine: CascadeEngine, EngineViewDataProviding {
     /// Tessellation for one object (or all when `name` is nil), in the
     /// cc_view_data layout the Metal viewer consumes (via the CCM1
     /// adapter in Shared/Viewer/Swift/EngineMeshAdapter.swift).
-    public func viewData(name: String?) async -> [EngineViewObject] {
+    /// A cc_view_data failure is reported in the result's
+    /// `errorMessage` (the session's cc_last_error text) — v0.2
+    /// silently returned [] here, which hid a broken viewer feed
+    /// behind an apparently empty scene.
+    public func viewData(name: String?) async -> EngineViewDataResult {
         await withCheckedContinuation { continuation in
             queue.async { [self] in
-                guard let session else { continuation.resume(returning: []); return }
+                guard let session else {
+                    continuation.resume(returning: EngineViewDataResult(
+                        objects: [], errorMessage: "Native engine session failed to start."))
+                    return
+                }
                 var objects: UnsafeMutablePointer<CCViewData>?
                 var count: Int32 = 0
                 let rc = name.map {
                     cc_view_data(session, $0, 0.5, &objects, &count)
                 } ?? cc_view_data(session, nil, 0.5, &objects, &count)
-                guard rc == 0, let objects else { continuation.resume(returning: []); return }
+                guard rc == 0, let objects else {
+                    let errName = String(cString: cc_last_error_name(session))
+                    let errMessage = String(cString: cc_last_error_message(session))
+                    continuation.resume(returning: EngineViewDataResult(
+                        objects: [],
+                        errorMessage: errMessage.isEmpty ? errName : errMessage))
+                    return
+                }
                 var result: [EngineViewObject] = []
                 for i in 0..<Int(count) {
                     let d = objects[i]
@@ -136,7 +151,7 @@ public final class NativeEngine: CascadeEngine, EngineViewDataProviding {
                         faceRanges: ranges))
                 }
                 cc_free_view_data(objects, count)
-                continuation.resume(returning: result)
+                continuation.resume(returning: EngineViewDataResult(objects: result))
             }
         }
     }

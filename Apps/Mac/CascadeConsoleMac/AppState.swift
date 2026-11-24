@@ -85,6 +85,35 @@ final class AppState: ObservableObject {
             appendLog(level: .result, text: "View cleared. The scene itself is unchanged.")
             return
         }
+        // Every other `view ...` line is app-layer too and never
+        // reaches the engine (same rule as the iPad app, v0.2.1):
+        // bare `view` shows everything, `view <name> [fit]` selects
+        // an existing object, anything else is a usage error. (In
+        // v0.2 these lines fell through to the stub engine, which
+        // silently swallowed them.)
+        let viewTokens = line.split(separator: " ").map(String.init)
+        if viewTokens.first?.lowercased() == "view" {
+            if viewTokens.count == 1 {
+                requestFitAll()
+                appendLog(level: .result, text: "Showing all objects.")
+                return
+            }
+            let isNameForm = viewTokens.count == 2
+                || (viewTokens.count == 3 && viewTokens[2].lowercased() == "fit")
+            if isNameForm {
+                let name = viewTokens[1]
+                if let item = objects.first(where: { $0.name == name }) {
+                    selectedObjectID = item.id
+                    requestFitAll()
+                    appendLog(level: .result, text: "Showing '\(name)'.")
+                } else {
+                    appendLog(level: .error, text: "view: no object named '\(name)'.")
+                }
+                return
+            }
+            appendLog(level: .error, text: "view: unrecognized view command. Try 'view', 'view <name>' or 'view fit'.")
+            return
+        }
 
         let result = engine.execute(line, objects: objects)
         for message in result.messages {

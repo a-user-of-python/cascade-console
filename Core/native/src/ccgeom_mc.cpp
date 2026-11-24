@@ -137,15 +137,23 @@ int ccgeom_tessellate(CCGeomShape* s, double deflectionMM,
   if (e != MC_OK || rc != MC_OK) { if (err) *err = xlate(e); return xlate(e); }
   // The façade mesh carries normals + per-face ranges the ccgeom layout
   // does not need; copy positions/indices into ccgeom-owned buffers.
-  float* v = (float*)std::malloc((mesh.vertexCount > 0 ? mesh.vertexCount * 3 : 1) * sizeof(float));
-  int* ix = (int*)std::malloc((mesh.triangleCount > 0 ? mesh.triangleCount * 3 : 1) * sizeof(int));
+  // COUNTS FIRST: mc_free_mesh() zeroes the whole MCFacadeMesh struct
+  // (it memsets it after freeing the arrays), so vertexCount /
+  // triangleCount must be captured BEFORE the free. Reading them after
+  // it — the v0.2 bug — returned 0/0 for every shape, so cc_view_data
+  // handed the apps an empty tessellation and the viewer rendered
+  // nothing ("0 object(s)") even though the session held the object.
+  const int vc = mesh.vertexCount;
+  const int tc = mesh.triangleCount;
+  float* v = (float*)std::malloc((vc > 0 ? vc * 3 : 1) * sizeof(float));
+  int* ix = (int*)std::malloc((tc > 0 ? tc * 3 : 1) * sizeof(int));
   if (!v || !ix) { std::free(v); std::free(ix); mc_free_mesh(&mesh); if (err) *err = CCGEOM_ERR_OCCT; return CCGEOM_ERR_OCCT; }
-  std::memcpy(v, mesh.positions, (size_t)mesh.vertexCount * 3 * sizeof(float));
-  std::memcpy(ix, mesh.indices, (size_t)mesh.triangleCount * 3 * sizeof(int));
+  std::memcpy(v, mesh.positions, (size_t)vc * 3 * sizeof(float));
+  std::memcpy(ix, mesh.indices, (size_t)tc * 3 * sizeof(int));
   mc_free_mesh(&mesh);
   *outVertices = v; *outIndices = ix;
-  if (outVertexCount) *outVertexCount = mesh.vertexCount;
-  if (outIndexCount) *outIndexCount = mesh.triangleCount * 3;
+  if (outVertexCount) *outVertexCount = vc;
+  if (outIndexCount) *outIndexCount = tc * 3;
   if (err) *err = CCGEOM_OK;
   return CCGEOM_OK;
 }
@@ -167,15 +175,18 @@ int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
   int e = MC_OK;
   int rc = mc_tessellate(raw(s), deflectionMM, &mesh, &e);
   if (e != MC_OK || rc != MC_OK) { if (err) *err = xlate(e); return xlate(e); }
-  CCGeomFaceRange* buf = (CCGeomFaceRange*)std::malloc((mesh.faceCount > 0 ? mesh.faceCount : 1) * sizeof(CCGeomFaceRange));
+  // Same capture-before-free rule as ccgeom_tessellate above:
+  // mc_free_mesh() memsets the struct, so faceCount is read first.
+  const int fc = mesh.faceCount;
+  CCGeomFaceRange* buf = (CCGeomFaceRange*)std::malloc((fc > 0 ? fc : 1) * sizeof(CCGeomFaceRange));
   if (!buf) { mc_free_mesh(&mesh); if (err) *err = CCGEOM_ERR_OCCT; return CCGEOM_ERR_OCCT; }
-  for (int f = 0; f < mesh.faceCount; ++f) {
+  for (int f = 0; f < fc; ++f) {
     buf[f].faceIndex = f;
     buf[f].indexStart = mesh.faceTriStart[f] * 3;
     buf[f].indexCount = mesh.faceTriCount[f] * 3;
   }
   mc_free_mesh(&mesh);
-  *outRanges = buf; *outCount = mesh.faceCount;
+  *outRanges = buf; *outCount = fc;
   if (err) *err = CCGEOM_OK;
   return CCGEOM_OK;
 }
