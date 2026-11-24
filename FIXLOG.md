@@ -750,3 +750,27 @@ like a box.")
 
 Version: MARKETING_VERSION 0.2.3, CURRENT_PROJECT_VERSION 5.
 Nothing was removed from knownCommands.
+
+CI on the v0.2.3 commit (f238ba41): all four workflows SUCCESS —
+Host tests (run 45393184087: prototype 47/47, tessellation
+contract, projection guard); Build Mac app (45393184010); Build
+iPad IPA (45393184129: symbol gate + file-sharing PlistBuddy gate
+green); Native engine (45393183863) — mc-backend matrix job
+reports "RESULT: 117 pass, 0 fail (mc per-command matrix)",
+"RESULT: 26 pass, 0 fail (mc view-data smoke)", and the new
+"RESULT: 25 pass, 0 fail (swift viewer harness)" against an
+mc-backend fixture whose numbers match the host OCCT fixture
+exactly (box 24 vertices / 12 triangles / volume 200; cylinder
+106 / 100 / 339.292); engine host suites 112 pass OCCT / 94 pass
+mock, sim 35/35 on both backends (also re-run locally from this
+tree before the push: 112 OCCT, 35/35 sim, 47/47 prototype,
+contract + projection guards green). The IPA artifact was
+downloaded and verified by hand: bundle com.user.cascadeconsole,
+version 0.2.3 (5), cc_execute / cc_session_create / mc_clone_shape
+/ mc_export_stl present, catalog.json + default.metallib + both
+OCCT licence texts bundled, Info.plist carries
+UIFileSharingEnabled = true and
+LSSupportsOpeningDocumentsInPlace = true. 9,157,068 bytes,
+md5 6fcce7d3a90d04f0449d9b6afec3ce15. The user's device verdict is the
+final judge: create a box — it should render as a solid box
+immediately, with the header reading "1 object(s)".
