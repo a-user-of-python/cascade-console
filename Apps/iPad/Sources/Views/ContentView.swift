@@ -87,7 +87,7 @@ struct ContentView: View {
             .navigationTitle("Objects")
         } detail: {
             VStack(spacing: 0) {
-                ViewportView(renderer: state.renderer)
+                ViewportView(renderer: state.renderer, objectCount: state.viewerObjectCount)
                     .frame(maxHeight: .infinity)
                 Divider()
                 ConsoleView()
@@ -110,7 +110,7 @@ struct ContentView: View {
             .tabItem { Label("Console", systemImage: "terminal") }
 
             NavigationStack {
-                ViewportView(renderer: state.renderer)
+                ViewportView(renderer: state.renderer, objectCount: state.viewerObjectCount)
                     .navigationTitle("3D View")
             }
             .tabItem { Label("3D View", systemImage: "cube") }

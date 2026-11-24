@@ -14,6 +14,15 @@ final class AppState: ObservableObject {
     @Published var scriptBuffer: String = ""
     @Published var currentFileName: String = "untitled.cascade"
     @Published var isRunning: Bool = false
+    /// Number of objects actually loaded in the 3D viewer, shown in
+    /// the viewport header. Published and updated AFTER the meshes
+    /// are loaded in refreshScene: v0.2.2's header read the
+    /// renderer's object list directly from the view body, but the
+    /// only published changes in refreshScene (the sidebar sync)
+    /// happen BEFORE loadMesh, so the header was evaluated while
+    /// the renderer was still empty and never re-evaluated — it
+    /// showed "0 object(s)" over a drawn scene (FIXLOG v0.2.3).
+    @Published private(set) var viewerObjectCount: Int = 0
 
     let engine: CascadeEngine
     /// The real Metal viewer (Shared/Viewer). Optional only because a
@@ -306,6 +315,9 @@ final class AppState: ObservableObject {
         } catch {
             appendLog(.error, "Viewer feed failed: \(error)")
         }
+        // Publish the header count only now that the renderer
+        // actually holds the meshes (see viewerObjectCount).
+        viewerObjectCount = renderer.objectIDs.count
     }
 
     // MARK: - Objects
@@ -320,6 +332,7 @@ final class AppState: ObservableObject {
     func removeObject(_ item: SceneObjectItem) {
         objects.removeAll { $0.id == item.id }
         renderer?.removeObject(id: item.shapeID)
+        viewerObjectCount = renderer?.objectIDs.count ?? 0
         if selectedObjectID == item.id {
             selectedObjectID = nil
         }
@@ -329,6 +342,7 @@ final class AppState: ObservableObject {
         objects.removeAll()
         selectedObjectID = nil
         renderer?.clearScene()
+        viewerObjectCount = renderer?.objectIDs.count ?? 0
         appendLog(.info, "Scene cleared (console-side list only; core objects are cleared by the core's own clear command).")
     }
 

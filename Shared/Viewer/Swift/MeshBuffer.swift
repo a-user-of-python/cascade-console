@@ -43,8 +43,27 @@ public struct MeshVertex: Equatable {
         self.position = position
         self.normal = normal
     }
-    /// Byte stride in both the CCM1 file and the Metal vertex buffer.
+    /// Byte stride of one vertex in the CCM1 FILE: six packed
+    /// Float32s (position + normal), read field-by-field by the
+    /// loader's cursor. This is a file-format constant ONLY.
     public static let stride = 24
+
+    /// In-memory layout of MeshVertex as an element of [MeshVertex]
+    /// — the layout a Metal vertex buffer built from that array
+    /// actually has, and therefore the ONLY layout the renderer's
+    /// vertex descriptor may declare. Each SIMD3<Float> member is
+    /// 16-byte aligned with a 16-byte stride, so the struct's memory
+    /// stride is 32 and the normal sits at byte offset 16 — not the
+    /// packed 24/12 of the file. v0.2.2 shipped the descriptor with
+    /// the file constants (24/12): the GPU strode 24 bytes per
+    /// vertex through 32-byte records and fetched normals/padding
+    /// as positions — the on-device "fan of slivers" (see FIXLOG
+    /// v0.2.3). Derived from MemoryLayout so they cannot drift from
+    /// the type again; the Swift viewer harness in CI re-reads an
+    /// uploaded buffer with exactly these values and asserts the
+    /// geometry survives.
+    public static let bufferStride = MemoryLayout<MeshVertex>.stride
+    public static let bufferNormalOffset = MemoryLayout<MeshVertex>.offset(of: \.normal)!
 }
 
 public struct MeshFaceGroup: Equatable {

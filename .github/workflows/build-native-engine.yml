@@ -167,3 +167,33 @@ jobs:
             -lc++ -o build/test_matrix_mc
           MATRIX_TMP="$(mktemp -d)"
           ./build/test_matrix_mc "$MATRIX_TMP" Core/scripts/demo.ccs
+
+      # Swift viewer harness (v0.2.3): the first gate that EXECUTES
+      # the production Swift viewer-feed code. The fixture is the
+      # mc backend's own cc_view_data output (device path); the
+      # harness binary is compiled from the production Swift sources
+      # (MeshBuffer, EngineMeshAdapter, EngineProtocol, SharedModels)
+      # plus the harness main, and asserts the geometry survives the
+      # adapter + loader AND the renderer's GPU vertex-layout
+      # contract (the stride bug that shipped the v0.2.2 fan).
+      - name: Generate view-data fixture (mc backend)
+        run: |
+          clang++ -std=c++17 -O2 \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            Core/native/tests/dump_view_fixture.cpp \
+            build/engine-host/libCascadeConsoleEngineHost.a \
+            build/kitlib-host/libCascadeKitHost.a \
+            -lc++ -o build/dump_view_fixture
+          ./build/dump_view_fixture build/fixture.ccfx
+
+      - name: Build + run Swift viewer harness (production parser + layout contract)
+        run: |
+          xcrun swiftc -O \
+            Shared/Viewer/Swift/MeshBuffer.swift \
+            Shared/Viewer/Swift/EngineMeshAdapter.swift \
+            Shared/Engine/EngineProtocol.swift \
+            Shared/Models/SharedModels.swift \
+            Shared/Viewer/Verification/swift-harness/main.swift \
+            -o build/swift_viewer_harness
+          ./build/swift_viewer_harness build/fixture.ccfx

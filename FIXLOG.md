@@ -677,3 +677,76 @@ licence texts bundled, and — the file-sharing fix proven in the
 shipped binary — Info.plist carries UIFileSharingEnabled = true
 and LSSupportsOpeningDocumentsInPlace = true. 9,156,298 bytes,
 md5 0dc9dbfdbcde23e249dc0007fceec63c.
+
+## v0.2.3 — device-feedback fixes (2026-11-24)
+
+The user's iPad test of v0.2.2 reported, with a screenshot:
+`box test 10 2 10` → "Created test.", the object listed in the
+sidebar — but the viewport shows a spiky fan (a couple of large
+pale triangles plus dozens of thin slivers radiating from one
+point) and the header still says "0 object(s)". ("This don't look
+like a box.")
+
+1. **The fan — vertex-buffer layout mismatch (Swift viewer
+   layer).** The chain was audited end to end against bytes from
+   the real engine. The C++ view data is GOOD (re-proven this
+   round: cc_view_data for the 10x2x10 box on the OCCT backend
+   returns 24 vertices / 12 triangles, signed mesh volume +200,
+   bbox [0 0 0 .. 10 2 10], 6 census face ranges, no out-of-range
+   indices; the v0.2.2 mc-backend probes agree). NativeEngine's
+   bridging, EngineMeshAdapter's CCM1 writing and
+   MeshBufferLoader's parsing are mutually consistent (the adapter
+   unwelds per corner; indices are sequential; the loader validates
+   unit normals and index ranges). The corruption is in the LAST
+   step: `CascadeRenderer.upload` copies the `[MeshVertex]` array's
+   raw memory into the MTLBuffer, but `buildPipelines` described
+   that buffer with `MeshVertex.stride` = 24 and normal offset 12 —
+   the PACKED CCM1 FILE layout. A `MeshVertex` in memory is two
+   `SIMD3<Float>` members, each 16-byte aligned with a 16-byte
+   stride (verified with a Swift layout probe: struct stride 32,
+   normal at byte offset 16). The GPU therefore strode 24 bytes
+   per vertex through 32-byte records. Deterministic host
+   reproduction from the real fixture: with the shipped descriptor
+   only 4 of 36 box-corner vertices are fetched at their true
+   positions, 20 fetched "positions" are actually normal-vector
+   components (all within +/-1 of the origin — the fan's hub), and
+   the GPU-visible signed volume is -17 instead of +200. With the
+   correct descriptor values (32/16) all 36 vertices are exact and
+   the volume is +200. FIX at the wrong layer: MeshBuffer.swift
+   now keeps `stride` = 24 as the documented CCM1 FILE stride only,
+   and adds `bufferStride` / `bufferNormalOffset` derived from
+   `MemoryLayout<MeshVertex>` (so they can never drift from the
+   type again); Renderer.swift's vertex descriptor declares those.
+   Nothing else in the chain changed — picking and face labels read
+   the CPU-side MeshObject and were never affected.
+2. **Header "0 object(s)" over a drawn scene.** The header read
+   `renderer?.objectIDs.count` in ViewportView's body, but
+   ViewportView observes nothing that changes after a load:
+   AppState's only @Published mutations in refreshScene (the
+   sidebar sync) happen BEFORE `loadMesh`, and nothing publishes
+   afterwards, so the count was evaluated while the renderer was
+   still empty and never re-evaluated. FIX: AppState publishes
+   `viewerObjectCount`, assigned from `renderer.objectIDs.count`
+   AFTER the load loop in refreshScene (and after removeObject /
+   clearScene mutations); ViewportView displays that value, passed
+   from ContentView at both layout sites.
+3. **The test hole that shipped this twice is closed.** Every
+   previous gate stopped at the C++ boundary — the Swift parser
+   and layout code had never been executed by any test. The
+   mc-backend-matrix CI job now (a) builds and runs
+   `Core/native/tests/dump_view_fixture.cpp` against the device-
+   path mc backend, writing its cc_view_data output (box + cylinder)
+   to a fixture, and (b) compiles the PRODUCTION Swift sources
+   (MeshBuffer.swift, EngineMeshAdapter.swift, EngineProtocol.swift,
+   SharedModels.swift) with `Shared/Viewer/Verification/swift-harness/main.swift`
+   via swiftc and runs the harness against the fixture. The harness
+   asserts the adapter+loader round-trip (counts, names, derived
+   bbox, census face-group partition, signed volume: box exactly
+   +200, cylinder within tessellation tolerance) AND re-reads the
+   parsed vertex array's raw memory with the descriptor's layout
+   values, asserting every vertex and the signed volume survive —
+   the exact read whose failure produced the fan. With the old
+   24/12 constants that check fails; that is the point of it.
+
+Version: MARKETING_VERSION 0.2.3, CURRENT_PROJECT_VERSION 5.
+Nothing was removed from knownCommands.

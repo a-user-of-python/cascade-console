@@ -7,6 +7,11 @@ import SwiftUI
 /// normative ViewerBridge commands, as the placeholder's chips did.
 struct ViewportView: View {
     let renderer: CascadeRenderer?
+    /// Objects actually loaded in the viewer, from AppState's
+    /// published count (updated after each scene load). Reading the
+    /// renderer's list directly from this body showed a stale 0 —
+    /// see AppState.viewerObjectCount (FIXLOG v0.2.3).
+    let objectCount: Int
     @State private var isWireframe = false
 
     var body: some View {
@@ -38,7 +43,7 @@ struct ViewportView: View {
                         renderer?.apply(.displayMode(isWireframe ? .wireframe : .shaded))
                     }
                     Spacer()
-                    Text("\(renderer?.objectIDs.count ?? 0) object(s)")
+                    Text("\(objectCount) object(s)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -145,6 +145,23 @@ same layout the Swift parser uses. Results, 2026-11-23:
   2626.616 mm² vs OCCT 2626.195 mm² (**0.016%** error); file 7,086 bytes.
 - Verdict printed by the script: `CONTRACT VERIFIED`.
 
+**Swift execution gate (v0.2.3):** the Python contract above proves
+the file format, but until v0.2.3 no gate ever ran the Swift side —
+and the shipped app broke there twice. The `mc-backend-matrix` CI
+job now generates a view-data fixture from the real engine
+(`Core/native/tests/dump_view_fixture.cpp`, mc backend) and runs
+`Verification/swift-harness/main.swift`, compiled with the
+production `MeshBuffer.swift` / `EngineMeshAdapter.swift` sources:
+it asserts the adapter + loader round-trip (counts, bbox, face
+groups, signed volume) and re-reads the parsed `[MeshVertex]`
+buffer with the renderer's vertex-descriptor layout values
+(`MeshVertex.bufferStride` / `bufferNormalOffset`), asserting every
+vertex survives. Note the format subtlety that caused the v0.2.2
+fan: the CCM1 file packs each vertex in 24 bytes, but a
+`MeshVertex` in memory has stride 32 (two 16-byte-stride
+`SIMD3<Float>` members, normal at offset 16). The file stride and
+the buffer stride are different constants on purpose now.
+
 ## Integration checklist for the two apps
 
 - Add all `Swift/*.swift` + `Shaders/Shaders.metal` to **both** app

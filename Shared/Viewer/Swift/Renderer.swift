@@ -96,9 +96,13 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
         meshDesc.attributes[0].offset = 0
         meshDesc.attributes[0].bufferIndex = 0
         meshDesc.attributes[1].format = .float3
-        meshDesc.attributes[1].offset = 12
+        // The vertex buffer is the raw memory of [MeshVertex]
+        // (see upload(_:)), so the descriptor must describe THAT
+        // layout — bufferStride / bufferNormalOffset (32 / 16),
+        // never the packed CCM1 file stride (24 / 12). v0.2.3 fix.
+        meshDesc.attributes[1].offset = MeshVertex.bufferNormalOffset
         meshDesc.attributes[1].bufferIndex = 0
-        meshDesc.layouts[0].stride = MeshVertex.stride
+        meshDesc.layouts[0].stride = MeshVertex.bufferStride
         meshDesc.layouts[0].stepFunction = .perVertex
 
         // Fill vs wireframe is an encoder state (setTriangleFillMode),
@@ -258,7 +262,12 @@ public final class CascadeRenderer: NSObject, ViewerBridge {
 
     private func upload(_ object: MeshObject) {
         // makeBuffer(bytes:) takes an UnsafeRawPointer, not a Data -
-        // pass each array's raw base address straight through.
+        // pass each array's raw base address straight through. The
+        // vertex buffer therefore holds [MeshVertex] in its memory
+        // layout (stride 32, normal at 16); buildPipelines' vertex
+        // descriptor declares exactly that via MeshVertex.bufferStride
+        // / bufferNormalOffset. (v0.2.2 declared the CCM1 file layout
+        // instead and the GPU fetched garbage — FIXLOG v0.2.3.)
         guard let vb = object.vertices.withUnsafeBytes({ raw in
                   device.makeBuffer(bytes: raw.baseAddress!, length: raw.count, options: .storageModeShared) }),
               let ib = object.indices.withUnsafeBytes({ raw in

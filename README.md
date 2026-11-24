@@ -30,6 +30,25 @@ specified in `docs/EXTRAS.md`, with host-prototype numbers in
 
 ## Honest status
 
+**v0.2.3 (2026-11-24): the viewer fan fix, and the first gate that
+runs the Swift viewer code.** The user's iPad test of v0.2.2 showed
+a spiky fan instead of a box (and a stale "0 object(s)" header).
+The engine's view data was again proven good byte-for-byte; the
+corruption was in the last Swift step: the renderer uploaded the
+vertex array's raw memory but described it to Metal with the
+packed CCM1 *file* stride (24 bytes, normal at 12), while a
+`MeshVertex` in memory has stride 32 with the normal at offset 16
+(two 16-byte-stride `SIMD3<Float>` members) — so the GPU fetched
+normals and padding as positions, fanning every triangle out of a
+point near the origin. The descriptor now declares the true memory
+layout, derived from `MemoryLayout` so it cannot drift, and the
+header count is published after each scene load. The standing
+lesson — C++ proof is not app proof — is now enforced by a CI gate
+that compiles the production Swift adapter/parser and runs it
+against real engine view data, including a byte-level re-read with
+the GPU's layout values. See `FIXLOG.md` for the full v0.2.3
+record.
+
 **v0.2.2 (2026-11-24): two more device-feedback fixes.** (1)
 Created geometry rendered inside-out on the iPad: the viewer's
 perspective matrix was left-handed while the view matrix, the
