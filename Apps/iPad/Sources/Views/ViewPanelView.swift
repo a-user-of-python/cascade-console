@@ -27,12 +27,12 @@ struct ViewPanelView: View {
     var body: some View {
         List {
             Section("Display") {
-                Toggle("Grid", isOn: toggleBinding(\.gridVisible, .setGrid))
-                Toggle("Axes", isOn: toggleBinding(\.axesVisible, .setAxes))
+                Toggle("Grid", isOn: toggleBinding(\.gridVisible, ViewStateChange.setGrid))
+                Toggle("Axes", isOn: toggleBinding(\.axesVisible, ViewStateChange.setAxes))
                 Toggle("Face number labels",
-                       isOn: toggleBinding(\.faceLabelsEnabled, .setFaceLabels))
+                       isOn: toggleBinding(\.faceLabelsEnabled, ViewStateChange.setFaceLabels))
                 Toggle("Edge number labels",
-                       isOn: toggleBinding(\.edgeLabelsEnabled, .setEdgeLabels))
+                       isOn: toggleBinding(\.edgeLabelsEnabled, ViewStateChange.setEdgeLabels))
                 Picker("Mode", selection: modeBinding) {
                     Text("Shaded").tag(DisplayMode.shaded)
                     Text("Shaded + Edges").tag(DisplayMode.shadedWithEdges)
@@ -80,7 +80,7 @@ struct ViewPanelView: View {
 
             Section("Measure") {
                 Toggle("Measure between two points",
-                       isOn: toggleBinding(\.measureEnabled, .setMeasure))
+                       isOn: toggleBinding(\.measureEnabled, ViewStateChange.setMeasure))
                 if state.viewState.measureEnabled {
                     Text(measureText)
                         .font(.callout)
