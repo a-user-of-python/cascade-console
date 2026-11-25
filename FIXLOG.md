@@ -1337,3 +1337,15 @@ fillet/cut/extrude; edge-list normalisation). No façade or
 interpreter change: no fuzzy boolean — the backend was
 proven clean, and geometry the user typed is never moved or
 grown to make a render look right.
+
+Gates (full stack once, shipping commit e6153ada): mc matrix
+237/237 (198 + 39 new), Swift harness 158/158 (154 + 4 new),
+view-data smoke 35/35, engine OCCT 184/184, engine mock 151
+pass + 9 named skips, host tests green (sim + prototype
+included), Intel engine job green. IPA verified from the
+downloaded artifact: com.user.cascadeconsole, 0.4.1 (11),
+both file-sharing keys true, 10,262,216 B, md5 d2c461df….
+Mac zip verified from download: app 0.4.1 (11), fat header
+0xcafebabe, x86_64 + arm64 slices, _cc_execute /
+_cc_session_create / _mc_clone_shape / _mc_export_stl present
+in BOTH slices, 28,346,115 B, md5 e5c2b2c1….
