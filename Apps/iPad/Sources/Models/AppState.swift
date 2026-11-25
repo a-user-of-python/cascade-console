@@ -26,6 +26,23 @@ final class AppState: ObservableObject {
     // `objectStats` caches the last view-data pull per object for
     // the Properties panel.
     @Published var project = ProjectFile()
+    /// Qualified names of objects consumed as operands by a step
+    /// (ModelStep.consumedObjectNames). Such sources are hidden in
+    /// the viewer (v0.4.1): a step's result sits inside or exactly
+    /// on its source — a fillet inside its box, a cut result
+    /// inside its target with the tool's flush end face reading
+    /// as a membrane over the hole — so a visible source makes
+    /// the result invisible. refreshScene applies the set to the
+    /// object list; the part tree's eye toggle re-shows a source
+    /// and removes it from this set, so the choice sticks.
+    /// Recomputed from the step list on every replay; console
+    /// commands never change it (the console has the in-place
+    /// `... as <same name>` form for replace semantics).
+    var autoHiddenSources: Set<String> = []
+    /// Sources the user deliberately re-showed with the eye
+    /// toggle. Subtracted from the consumed set wherever it is
+    /// (re)computed, so the choice survives replays too.
+    var userShownSources: Set<String> = []
     @Published var currentProjectName: String = "untitled.cascadeproj"
     @Published var profiles: [String] = []
     @Published var objectStats: [String: EngineViewObject] = [:]
@@ -327,6 +344,15 @@ final class AppState: ObservableObject {
         for name in names where !objects.contains(where: { $0.shapeID == name }) {
             objects.append(SceneObjectItem(shapeID: name, name: name))
         }
+        // v0.4.1: sources consumed by a step are hidden so the
+        // step's result is what the viewer shows (see
+        // autoHiddenSources). Applied here, on the synced list,
+        // so it covers fresh adds and full replays alike; the
+        // mesh loop below reads isVisible from these entries.
+        for i in objects.indices
+        where autoHiddenSources.contains(objects[i].shapeID) {
+            objects[i].isVisible = false
+        }
         if let selectedObjectID,
            !objects.contains(where: { $0.id == selectedObjectID }) {
             self.selectedObjectID = nil
@@ -371,6 +397,14 @@ final class AppState: ObservableObject {
         guard let index = objects.firstIndex(where: { $0.id == item.id })
         else { return }
         objects[index].isVisible.toggle()
+        // Re-showing a source a step consumed is a deliberate
+        // user choice: drop it from the auto-hide set and record
+        // it as user-shown so replay recomputes keep it visible
+        // too (v0.4.1).
+        if objects[index].isVisible {
+            autoHiddenSources.remove(item.shapeID)
+            userShownSources.insert(item.shapeID)
+        }
         renderer?.apply(.setObjectVisible(id: item.shapeID, objects[index].isVisible))
     }
 
@@ -437,6 +471,8 @@ final class AppState: ObservableObject {
                 CascadeNames.directory(of: $0) == command
             }) ?? b.predictedName
             project.steps.append(step)
+            autoHiddenSources.formUnion(
+                step.consumedObjectNames.filter { !userShownSources.contains($0) })
             selectedStepID = step.id
             lastReplayError = nil
             await refreshScene(fit: false)
@@ -516,6 +552,12 @@ final class AppState: ObservableObject {
             }
             engine = scratch
             project.steps = newSteps
+            // Recompute the consumed-source set from the replayed
+            // list (v0.4.1): an edit may change which objects are
+            // consumed, a delete may free a source entirely.
+            // Sources the user deliberately re-showed stay shown.
+            autoHiddenSources = Set(newSteps.flatMap { $0.consumedObjectNames })
+                .subtracting(userShownSources)
             selectedStepID = selectStepID
             lastReplayError = nil
             objects.removeAll()
@@ -529,6 +571,8 @@ final class AppState: ObservableObject {
     func newProject() {
         engine = EngineFactory.makeEngine()
         project = ProjectFile()
+        autoHiddenSources = []
+        userShownSources = []
         currentProjectName = "untitled.cascadeproj"
         selectedStepID = nil
         lastReplayError = nil
@@ -686,6 +730,11 @@ final class AppState: ObservableObject {
     private func loadProject(_ file: ProjectFile, fileName: String) {
         currentProjectName = fileName
         project = file
+        // A different project starts with a clean visibility
+        // slate (v0.4.1): consumed sources hide per the new
+        // project's own steps when the replay lands.
+        userShownSources = []
+        autoHiddenSources = []
         applyViewerSnapshot(file.viewer)
         replayProject(steps: file.steps, selectStepID: nil)
         appendLog(.info, "Opened project \(fileName) (\(file.steps.count) step(s)).")
