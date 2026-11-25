@@ -17,7 +17,11 @@ struct LeftPanelView: View {
             Picker("Panel", selection: $tab) {
                 Text("Parts").tag(0)
                 Text("History").tag(1)
-                Text("Properties").tag(2)
+                // "Properties" truncated to "Properti…" in the
+                // 300 pt panel's four-way segmented control
+                // (v0.4.2, same device screenshot as the title
+                // fix) — the short label fits without truncation.
+                Text("Props").tag(2)
                 Text("View").tag(3)
             }
             .pickerStyle(.segmented)

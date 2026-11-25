@@ -28,6 +28,10 @@ on:
       # v0.3.0: the harness also executes the production model layer
       # (Shared/Model) against the mc namespace fixture.
       - "Shared/Model/**"
+      # v0.4.2: the harness also compiles + drives the production
+      # AppState (Models) and its FileStore (Services).
+      - "Apps/iPad/Sources/Models/**"
+      - "Apps/iPad/Sources/Services/**"
       - ".github/workflows/build-native-engine.yml"
 
 jobs:
@@ -177,6 +181,25 @@ jobs:
           MATRIX_TMP="$(mktemp -d)"
           ./build/test_matrix_mc "$MATRIX_TMP" Core/scripts/demo.ccs
 
+      # v0.4.2: delete / re-add SEQUENCE matrix — the AppState driving
+      # pattern (add on the live session; delete/edit = replay into a
+      # fresh session, adopted only on full success; cc_view_data pull
+      # after every mutation) for every panel command. The per-command
+      # matrix above proves each command once; this proves the
+      # sequences the user actually performs (the v0.4.1 device
+      # report: "delete a fillet and try again on that edge — it
+      # fails").
+      - name: Build + run delete/re-add sequence matrix (mc backend)
+        run: |
+          clang++ -std=c++17 -O2 \
+            -ICore/native/include -ICore/native/src \
+            -Icascade-port-src/Facade \
+            Core/native/tests/test_sequences_mc.cpp \
+            build/engine-host/libCascadeConsoleEngineHost.a \
+            build/kitlib-host/libCascadeKitHost.a \
+            -lc++ -o build/test_sequences_mc
+          ./build/test_sequences_mc
+
       # Swift viewer harness (v0.2.3, extended v0.2.4 + v0.3.0): the
       # gate that EXECUTES the production Swift viewer code. The
       # fixture is the mc backend's own cc_view_data output (device
@@ -206,9 +229,20 @@ jobs:
             -lc++ -o build/dump_view_fixture
           ./build/dump_view_fixture build/fixture.ccfx build/fixture_ns.txt
 
+      # v0.4.2: the harness ALSO compiles the production AppState +
+      # NativeEngine (with CASCADE_NATIVE_ENGINE and the real module
+      # map, linked against the host engine + kit libraries built
+      # above) and drives AppState through the delete / re-add
+      # sequences of the v0.4.1 device report — the production app
+      # object itself, not a re-implementation of its logic. The
+      # renderer is nil in CI (no Metal device), so refreshScene
+      # returns early; the assertions read the session through the
+      # engine's own view-data queries.
       - name: Build + run Swift viewer harness (production parser + layout contract)
         run: |
           xcrun swiftc -O \
+            -D CASCADE_NATIVE_ENGINE \
+            -Xcc -fmodule-map-file=Core/native/bridge/module.modulemap \
             Shared/Viewer/Swift/MeshBuffer.swift \
             Shared/Viewer/Swift/EngineMeshAdapter.swift \
             Shared/Viewer/Swift/SceneHelpers.swift \
@@ -217,13 +251,20 @@ jobs:
             Shared/Viewer/Swift/Camera.swift \
             Shared/Viewer/Swift/SceneStore.swift \
             Shared/Viewer/Swift/ViewState.swift \
+            Shared/Viewer/Swift/Renderer.swift \
             Shared/Engine/EngineProtocol.swift \
+            Shared/Engine/NativeEngine.swift \
             Shared/Models/SharedModels.swift \
             Shared/Model/CascadeNames.swift \
             Shared/Model/CommandSpecs.swift \
             Shared/Model/ModelStep.swift \
             Shared/Model/ProjectFile.swift \
             Shared/Model/SimForm.swift \
+            Apps/iPad/Sources/Models/AppState.swift \
+            Apps/iPad/Sources/Services/FileStore.swift \
             Shared/Viewer/Verification/swift-harness/main.swift \
+            build/engine-host/libCascadeConsoleEngineHost.a \
+            build/kitlib-host/libCascadeKitHost.a \
+            -lc++ \
             -o build/swift_viewer_harness
           ./build/swift_viewer_harness build/fixture.ccfx build/fixture_ns.txt

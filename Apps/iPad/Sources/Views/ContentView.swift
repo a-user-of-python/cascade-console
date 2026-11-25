@@ -132,6 +132,18 @@ struct ContentView: View {
                     .frame(width: 320)
             }
             .navigationTitle("Cascade Console")
+            // v0.4.2: the default (large) title style renders the
+            // title INTO the content area on iPad — with a fixed
+            // three-panel HStack as the root it landed across the
+            // left sidebar at display size, overlapping the part
+            // tree and spilling toward the viewport (device
+            // screenshot, 2026-11-24). Inline keeps it a compact
+            // single line inside the navigation bar, truncated by
+            // the system rather than overflowing. macOS titles are
+            // always inline; the modifier is iOS-only.
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar { detailToolbar }
         }
     }

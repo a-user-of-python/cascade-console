@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -682,6 +683,65 @@ int main(int argc, char** argv) {
             "demo.ccs: part3 label count == census edge count");
       cc_free_view_data(dobjs, dn);
     }
+  }
+
+  // ---- v0.4.2: tessellation quality --------------------------------
+  // Device report: "fillets/spheres are really low poly". The pinned
+  // facade's mc_tessellate hardcodes a 0.5 rad angular deflection, so
+  // curved faces stayed faceted at any linear deflection (sphere
+  // r=10: 306 triangles; filleted cube: 628). The v0.4.2 policy
+  // (ccgeom_mc tessellationPolicy -> mc_tessellate_ex) is size-aware:
+  // linear = clamp(0.004 * bbox diagonal, 0.02, 0.5) mm, angular =
+  // 0.20 rad. Floors below are ~70% of the OCCT 8.0.1 measurements
+  // (sphere r=10: 2022; fillet cube r=1: 2804; torus 10/3: 7938;
+  // cylinder r=5: 248; cone: 568) — high enough that the old mesh
+  // can never pass, loose enough for platform noise. Flat faces
+  // must stay exactly flat: a box is 12 triangles, never more.
+  // STL export shares the policy (mc_export_stl), pinned by facet
+  // count read from the written file (ASCII "facet normal" lines,
+  // or the binary header count when the writer goes binary).
+  std::printf("== v0.4.2: tessellation quality ==\n");
+  {
+    auto tris = [](Session& i, const char* name) {
+      CCViewData* vd = nullptr; int n = 0;
+      if (cc_view_data(i.s, name, 0.5, &vd, &n) != 0 || n != 1) return -1;
+      int t = vd[0].triangleCount;
+      cc_free_view_data(vd, n);
+      return t;
+    };
+    Session i;
+    check(i.run("box b 10 10 10") == 0, "v042 tess: box rc 0");
+    check(tris(i, "b") == 12, "v042 tess: box stays exactly 12 triangles");
+    check(i.run("sphere s 10") == 0, "v042 tess: sphere rc 0");
+    check(tris(i, "s") >= 1500, "v042 tess: sphere r=10 >= 1500 tris (was 306)");
+    check(i.run("sphere s2 2") == 0, "v042 tess: small sphere rc 0");
+    check(tris(i, "s2") >= 1500, "v042 tess: sphere r=2 >= 1500 tris (was 306)");
+    check(i.run("sphere big 50") == 0, "v042 tess: big sphere rc 0");
+    check(tris(i, "big") >= 1500, "v042 tess: sphere r=50 >= 1500 tris (was 978)");
+    check(i.run("cylinder c 5 12") == 0, "v042 tess: cylinder rc 0");
+    check(tris(i, "c") >= 180, "v042 tess: cylinder r=5 >= 180 tris (was 100)");
+    check(i.run("cone k 6 2 10") == 0, "v042 tess: cone rc 0");
+    check(tris(i, "k") >= 250, "v042 tess: cone >= 250 tris (was 152)");
+    check(i.run("torus t 10 3") == 0, "v042 tess: torus rc 0");
+    check(tris(i, "t") >= 4000, "v042 tess: torus 10/3 >= 4000 tris (was 1352)");
+    check(i.run("fillet f b 1") == 0, "v042 tess: fillet rc 0");
+    check(tris(i, "f") >= 2000, "v042 tess: fillet cube r=1 >= 2000 tris (was 628)");
+    // STL inherits the policy mesh.
+    std::string stl = T("v042_sphere.stl");
+    check(i.run("export-stl s " + stl) == 0, "v042 tess: export-stl rc 0");
+    std::string body = fileContents(stl);
+    long facets = -1;
+    if (body.rfind("solid", 0) == 0 &&
+        body.find("facet normal") != std::string::npos) {
+      facets = 0;
+      for (size_t p = body.find("facet normal"); p != std::string::npos;
+           p = body.find("facet normal", p + 1)) ++facets;
+    } else if (body.size() > 84) {
+      uint32_t n = 0;
+      std::memcpy(&n, body.data() + 80, 4);
+      facets = (long)n;
+    }
+    check(facets >= 1500, "v042 tess: STL sphere facets >= 1500 (policy mesh, was 306)");
   }
 
   std::printf("RESULT: %d pass, %d fail (mc per-command matrix)\n", g_pass, g_fail);

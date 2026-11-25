@@ -355,13 +355,42 @@ int ccgeom_counts(CCGeomShape* s, int* faces, int* edges, int* err) {
   } catch (const std::exception& e) { return setErr(err, CCGEOM_ERR_OCCT, std::string("counts: ") + e.what()); }
 }
 
+// ---- Tessellation policy (v0.4.2): the identical formula to the
+// mc backend (ccgeom_mc.cpp) so host and device meshes agree —
+// linear deflection = clamp(0.004 * bbox diagonal, 0.02, 0.5) mm,
+// applied as an upper bound on the caller's request, and angular
+// deflection 0.20 rad (the BRepMesh default 0.5 rad facets small
+// curved faces — fillets — regardless of the linear deflection).
+static void tessellationPolicy(CCGeomShape* s, double requested,
+                               double* outLin, double* outAng) {
+  *outAng = 0.20;
+  double lin = requested;
+  int e = CCGEOM_OK;
+  double bb[6] = {0, 0, 0, 0, 0, 0};
+  if (s && ccgeom_bbox(s, bb, &e) == CCGEOM_OK && e == CCGEOM_OK) {
+    const double dx = bb[3] - bb[0];
+    const double dy = bb[4] - bb[1];
+    const double dz = bb[5] - bb[2];
+    const double diag = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (diag > 0) {
+      double p = 0.004 * diag;
+      if (p < 0.02) p = 0.02;
+      if (p > 0.5) p = 0.5;
+      if (p < lin) lin = p;
+    }
+  }
+  *outLin = lin;
+}
+
 // ---------------------------------------------------------------- tessellation
 int ccgeom_tessellate(CCGeomShape* s, double deflectionMM,
                       float** outVertices, int* outVertexCount,
                       int** outIndices, int* outIndexCount, int* err) {
   if (!s || !outVertices || !outIndices) return setErr(err, CCGEOM_ERR_INVALID_ARG, "tessellate: null argument");
   try {
-    BRepMesh_IncrementalMesh mesher(s->shape, deflectionMM);
+    double lin, ang;
+    tessellationPolicy(s, deflectionMM, &lin, &ang);
+    BRepMesh_IncrementalMesh mesher(s->shape, lin, Standard_False, ang, Standard_True);
     (void)mesher;
     std::vector<float> verts;
     std::vector<int> idx;
@@ -418,7 +447,9 @@ int ccgeom_export_step(CCGeomShape* s, const char* path, int* err) {
 int ccgeom_export_stl(CCGeomShape* s, const char* path, int* err) {
   if (!s || !path) return setErr(err, CCGEOM_ERR_INVALID_ARG, "export-stl: null argument");
   try {
-    BRepMesh_IncrementalMesh mesher(s->shape, 0.5);
+    double lin, ang;
+    tessellationPolicy(s, 0.5, &lin, &ang);
+    BRepMesh_IncrementalMesh mesher(s->shape, lin, Standard_False, ang, Standard_True);
     (void)mesher;
     StlAPI_Writer writer;
     if (!writer.Write(s->shape, path)) return setErr(err, CCGEOM_ERR_OCCT, "export-stl: writer did not complete");
@@ -545,7 +576,9 @@ int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
                        CCGeomFaceRange** outRanges, int* outCount, int* err) {
   if (!s || !outRanges || !outCount) return setErr(err, CCGEOM_ERR_INVALID_ARG, "face_ranges: null argument");
   try {
-    BRepMesh_IncrementalMesh mesher(s->shape, deflectionMM);
+    double lin, ang;
+    tessellationPolicy(s, deflectionMM, &lin, &ang);
+    BRepMesh_IncrementalMesh mesher(s->shape, lin, Standard_False, ang, Standard_True);
     (void)mesher;
     CCIndexMap fm;
     TopExp::MapShapes(s->shape, TopAbs_FACE, fm);

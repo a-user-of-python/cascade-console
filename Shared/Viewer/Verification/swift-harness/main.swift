@@ -901,5 +901,160 @@ do {
           "sim form: run/clear lines are the console commands verbatim")
 }
 
+// MARK: - AppState sequences (v0.4.2): delete / re-add through the
+// production AppState object
+//
+// The C++ sequence matrix (Core/native/tests/test_sequences_mc.cpp)
+// drives cc_execute the way AppState drives it. This section removes
+// the "the way" from that sentence: it runs the PRODUCTION AppState
+// — the exact object the app's views drive — against a real
+// NativeEngine on the mc backend, through the v0.4.1 device report's
+// sequence (add a box, fillet one edge, DELETE the fillet step, add
+// the same fillet again) plus cut delete/re-add, save/reload/replay,
+// and an edit after a delete. The renderer is nil (CI has no Metal
+// device to hand it), so refreshScene returns early and assertions
+// read the session back through the production engine's own
+// EngineViewDataProviding queries — the same reads refreshScene
+// itself makes. If the failure lives in AppState's bookkeeping
+// (name claims, consumed-source sets, replay adoption), it fails
+// here, in CI, not on a device.
+
+@MainActor
+func waitIdle(_ state: AppState, _ what: String) async -> Bool {
+    for _ in 0..<600 {  // ~30 s at 50 ms
+        if !state.isRunning { return true }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+    check(false, "appstate: timed out waiting for \(what)")
+    return false
+}
+
+@MainActor
+func appStateSequences() async {
+    let state = AppState(engine: NativeEngine(), viewer: nil,
+                         fileStore: FileStore())
+    let provider = state.engine as? EngineViewDataProviding
+    check(provider != nil, "appstate: the harness engine provides view data")
+    guard let provider else { return }
+
+    func names() async -> [String] { await provider.objectNames() }
+    func volume(of name: String) async -> Double {
+        let feed = await provider.viewData(name: name)
+        return feed.objects.first?.volume ?? -1
+    }
+    func specParams(_ id: String, _ overrides: [String: String]) -> [String: String] {
+        var p = CommandCatalog.spec(for: id)?.defaultParams ?? [:]
+        for (k, v) in overrides { p[k] = v }
+        return p
+    }
+
+    // -- the lead repro: box -> fillet -> delete -> fillet again ----
+    state.addStepFromUI(command: "box",
+                        params: specParams("box", ["width": "10", "depth": "10", "height": "10"]),
+                        name: "")
+    _ = await waitIdle(state, "box add")
+    check(state.project.steps.count == 1, "appstate: box step recorded")
+    check(await names() == ["box:box1"], "appstate: session holds box:box1")
+    check(state.lastReplayError == nil, "appstate: no error after box add")
+
+    let filletParams = specParams("fillet", ["source": "box:box1", "radius": "1", "edges": "3"])
+    state.addStepFromUI(command: "fillet", params: filletParams, name: "")
+    _ = await waitIdle(state, "fillet add")
+    check(state.project.steps.count == 2, "appstate: fillet step recorded")
+    check(await names().contains("fillet:fillet1"), "appstate: session holds fillet:fillet1")
+    let filletVolume = await volume(of: "fillet:fillet1")
+    check(approx(filletVolume, 997.854, 0.01),
+          "appstate: fillet volume == 997.854 (one edge, r=1; got \(filletVolume))")
+    check(state.autoHiddenSources == ["box:box1"],
+          "appstate: the fillet consumed (hid) its source box")
+
+    // Save here so the reload below replays exactly [box, fillet].
+    state.currentProjectName = "harness-sequences.cascadeproj"
+    state.saveProject()
+
+    guard let filletStep = state.project.steps.first(where: { $0.command == "fillet" }) else {
+        check(false, "appstate: fillet step present for deletion")
+        return
+    }
+    state.deleteStep(id: filletStep.id)
+    _ = await waitIdle(state, "fillet delete replay")
+    check(state.lastReplayError == nil,
+          "appstate: deleting the fillet step replays clean (got \(state.lastReplayError ?? "nil"))")
+    check(state.project.steps.count == 1, "appstate: fillet step removed from history")
+    check(await names() == ["box:box1"], "appstate: session back to the bare box")
+    check(state.autoHiddenSources.isEmpty,
+          "appstate: consumed-source set recomputed empty after the delete")
+
+    state.addStepFromUI(command: "fillet", params: filletParams, name: "")
+    _ = await waitIdle(state, "fillet re-add")
+    check(state.project.steps.count == 2, "appstate: re-added fillet step recorded")
+    check(await names().contains("fillet:fillet1"),
+          "appstate: THE REPRO — the same fillet on the same edge succeeds after the delete")
+    check(approx(await volume(of: "fillet:fillet1"), filletVolume, 0.01),
+          "appstate: re-added fillet geometry identical to the first")
+
+    // -- save -> delete -> re-add -> reload -> replay ----------------
+    state.fileStore.refresh()
+    if let item = state.fileStore.items.first(
+        where: { $0.name == "harness-sequences.cascadeproj" }) {
+        state.openProject(item: item)
+    } else {
+        check(false, "appstate: saved project visible in the file store")
+    }
+    _ = await waitIdle(state, "project reload replay")
+    check(state.lastReplayError == nil, "appstate: saved project replays clean on reload")
+    check(state.project.steps.count == 2, "appstate: reloaded project has box + fillet steps")
+    check(approx(await volume(of: "fillet:fillet1"), filletVolume, 0.01),
+          "appstate: reloaded fillet geometry identical")
+
+    // -- cut: delete + re-add ----------------------------------------
+    state.addStepFromUI(command: "box",
+                        params: specParams("box", ["width": "4", "depth": "4", "height": "4",
+                                                   "atX": "3", "atY": "3", "atZ": "3"]),
+                        name: "")
+    _ = await waitIdle(state, "tool box add")
+    let cutParams = specParams("cut", ["a": "box:box1", "b": "box:box2"])
+    state.addStepFromUI(command: "cut", params: cutParams, name: "")
+    _ = await waitIdle(state, "cut add")
+    check(approx(await volume(of: "cut:cut1"), 936.0, 0.01),
+          "appstate: cut volume == 936 (tool fully inside the target)")
+    if let cutStep = state.project.steps.first(where: { $0.command == "cut" }) {
+        state.deleteStep(id: cutStep.id)
+        _ = await waitIdle(state, "cut delete replay")
+        check(!(await names()).contains("cut:cut1"), "appstate: cut gone after its step is deleted")
+        state.addStepFromUI(command: "cut", params: cutParams, name: "")
+        _ = await waitIdle(state, "cut re-add")
+        check(approx(await volume(of: "cut:cut1"), 936.0, 0.01),
+              "appstate: re-added cut geometry identical")
+    } else {
+        check(false, "appstate: cut step present for deletion")
+    }
+
+    // -- edit after delete --------------------------------------------
+    if let fillet = state.project.steps.first(where: { $0.command == "fillet" }) {
+        state.deleteStep(id: fillet.id)
+        _ = await waitIdle(state, "fillet delete before edit")
+    }
+    if let boxStep = state.project.steps.first(where: { $0.command == "box" && $0.assignedName == "box:box1" }) {
+        var edited = boxStep.params
+        edited["width"] = "20"
+        state.applyStepEdit(id: boxStep.id, params: edited, name: boxStep.name)
+        _ = await waitIdle(state, "box edit replay")
+        check(state.lastReplayError == nil,
+              "appstate: editing the box after deleting the fillet replays clean")
+        check(approx(await volume(of: "cut:cut1"), 1936.0, 0.01),
+              "appstate: edited model rebuilt (cut == 2000 - 64 == 1936)")
+    } else {
+        check(false, "appstate: box step present for the edit")
+    }
+}
+
+let appStateGate = DispatchSemaphore(value: 0)
+Task { @MainActor in
+    await appStateSequences()
+    appStateGate.signal()
+}
+appStateGate.wait()
+
 print("RESULT: \(passCount) pass, \(failCount) fail (swift viewer harness)")
 exit(failCount == 0 ? 0 : 1)

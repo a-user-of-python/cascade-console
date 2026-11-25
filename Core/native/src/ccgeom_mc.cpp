@@ -2,10 +2,11 @@
 // ccgeom_mc.cpp — Layer-1 backend: adapter over the cascade-port mc_*
 // façade (CascadeKit, OCCT 8.0.1). THIS is the device build's backend:
 // every call forwards to an existing mc_* function; the only new Layer-1
-// functions required are the two in mc_additions.h (mc_clone_shape,
-// mc_export_stl). Conventions match the façade: mm, inputs never
-// consumed, caller owns handles (here: this adapter owns them and frees
-// with mc_free_shape when the interpreter releases a shape).
+// functions required are the three in mc_additions.h (mc_clone_shape,
+// mc_export_stl, mc_tessellate_ex). Conventions match the façade: mm,
+// inputs never consumed, caller owns handles (here: this adapter owns
+// them and frees with mc_free_shape when the interpreter releases a
+// shape).
 //
 // mc_* error translation: MC_ERR_INVALID_ARG -> CCGEOM_ERR_INVALID_ARG,
 // MC_ERR_EMPTY_RESULT -> CCGEOM_ERR_EMPTY, anything else -> CCGEOM_ERR_OCCT.
@@ -18,6 +19,7 @@
 #include "occt_facade.h"
 #include "mc_additions.h"
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -171,12 +173,55 @@ int ccgeom_counts(CCGeomShape* s, int* faces, int* edges, int* err) {
   int rc = mc_shape_counts(raw(s), faces, edges, &verts, &e);
   if (err) *err = xlate(e); return xlate(e) == CCGEOM_OK ? rc : xlate(e);
 }
+// ---- Tessellation policy (v0.4.2) -----------------------------------
+// The pinned façade's mc_tessellate hardcodes a 0.5 rad ANGULAR
+// deflection: small curved faces stay faceted no matter how fine the
+// linear deflection is (measured on OCCT 8.0.1: a filleted 10 mm
+// cube meshes to 628 triangles at every linear deflection from 0.5
+// down to 0.05 mm, a r=10 sphere to 306). tessellate/face_ranges
+// therefore drive mc_tessellate_ex (the CI-injected façade addition)
+// with:
+//   linear deflection = clamp(0.004 * bbox diagonal, 0.02, 0.5) mm
+//     — size-aware: a 1 mm fillet (diag ~17) gets 0.07 mm, a 100 mm
+//       sphere (diag ~346) the 0.5 mm cap, and mesh size stays
+//       bounded for huge parts;
+//   angular deflection = 0.20 rad (~11.5 degrees) at every size.
+// The caller-requested deflection stays an upper bound: asking for
+// finer gets finer, asking for coarser gets the policy. Both entry
+// points share this helper so they always describe the SAME
+// triangulation (face ranges are slices of the tessellation).
+// Flat faces are unaffected — a plain box still meshes to exactly
+// 12 triangles. mc_export_stl applies the same formula on the
+// façade side; keep the two in step.
+static void tessellationPolicy(CCGeomShape* s, double requested,
+                               double* outLin, double* outAng) {
+  *outAng = 0.20;
+  double lin = requested;
+  int e = MC_OK;
+  double bb[6] = {0, 0, 0, 0, 0, 0};
+  if (s && mc_bbox(raw(s), bb, &e) == MC_OK && e == MC_OK) {
+    const double dx = bb[3] - bb[0];
+    const double dy = bb[4] - bb[1];
+    const double dz = bb[5] - bb[2];
+    const double diag = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (diag > 0) {
+      double p = 0.004 * diag;
+      if (p < 0.02) p = 0.02;
+      if (p > 0.5) p = 0.5;
+      if (p < lin) lin = p;
+    }
+  }
+  *outLin = lin;
+}
+
 int ccgeom_tessellate(CCGeomShape* s, double deflectionMM,
                       float** outVertices, int* outVertexCount,
                       int** outIndices, int* outIndexCount, int* err) {
   MCFacadeMesh mesh{};
   int e = MC_OK;
-  int rc = mc_tessellate(raw(s), deflectionMM, &mesh, &e);
+  double lin, ang;
+  tessellationPolicy(s, deflectionMM, &lin, &ang);
+  int rc = mc_tessellate_ex(raw(s), lin, ang, &mesh, &e);
   if (e != MC_OK || rc != MC_OK) { if (err) *err = xlate(e); return xlate(e); }
   // The façade mesh carries normals + per-face ranges the ccgeom layout
   // does not need; copy positions/indices into ccgeom-owned buffers.
@@ -214,9 +259,13 @@ int ccgeom_face_ranges(CCGeomShape* s, double deflectionMM,
   // The facade mesh's per-face triangle ranges are in the same TopExp
   // traversal order as the census (facade header, section 9), so
   // range f IS census face f. Converted to index-element units.
+  // Same tessellation policy as ccgeom_tessellate (v0.4.2): the
+  // ranges must slice the same triangulation the viewer uploads.
   MCFacadeMesh mesh{};
   int e = MC_OK;
-  int rc = mc_tessellate(raw(s), deflectionMM, &mesh, &e);
+  double lin, ang;
+  tessellationPolicy(s, deflectionMM, &lin, &ang);
+  int rc = mc_tessellate_ex(raw(s), lin, ang, &mesh, &e);
   if (e != MC_OK || rc != MC_OK) { if (err) *err = xlate(e); return xlate(e); }
   // Same capture-before-free rule as ccgeom_tessellate above:
   // mc_free_mesh() memsets the struct, so faceCount is read first.
