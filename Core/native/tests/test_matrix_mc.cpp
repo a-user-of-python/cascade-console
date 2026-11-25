@@ -149,6 +149,110 @@ int main(int argc, char** argv) {
     check(i.code("fillet bad b 1 edges 99") == 2005, "fillet: bad edge index -> E2005");
   }
 
+  // ---- v0.4.1 audit regressions ------------------------------------
+  // (1) Fillet hard numbers. The device report was "fillet went
+  // through but nothing showed up" — the app-side cause was
+  // visibility (the source box stayed visible around the result;
+  // fixed in AppState), but the backend half of that claim is
+  // pinned here so a silent no-op fillet (input returned
+  // unchanged) can never pass again: volume AND face count AND
+  // mesh size, for the new-name and in-place forms alike.
+  // (2) Flush cuts: cutter face coplanar with the target's face,
+  // every axis, both directions, plus a translated tool, a
+  // full-slab cut and a through cut. A zero-thickness membrane
+  // sealing the hole leaves the volume ~correct, so conviction
+  // is by face census + mesh: no result triangle may lie in the
+  // shared plane inside the cutter's footprint.
+  std::printf("== v0.4.1: fillet numbers + flush cuts ==\n");
+  { Session i;
+    i.run("box b 10 10 10");
+    double vol, area, bb[6]; int f, e;
+    cc_object_stats(i.s, "b", &vol, &area, bb, &f, &e);
+    check(f == 6, "v041 fillet: cube starts with 6 faces");
+    check(i.run("fillet f b 1") == 0, "v041 fillet: rc 0");
+    cc_object_stats(i.s, "f", &vol, &area, bb, &f, &e);
+    check(near(vol, 975.587, 1e-3),
+          "v041 fillet: volume == 975.587 (true fillet, not the cube's 1000)");
+    check(f == 26, "v041 fillet: 26 faces (6 + 12 fillets + 8 corners)");
+    CCViewData* vd = nullptr; int n = 0;
+    check(cc_view_data(i.s, "f", 0.5, &vd, &n) == 0 && n == 1,
+          "v041 fillet: view data present");
+    if (vd && n == 1) {
+      check(vd[0].triangleCount > 100,
+            "v041 fillet: mesh triangles >> the cube's 12");
+      cc_free_view_data(vd, n);
+    }
+    check(i.run("fillet b 1 as b") == 0, "v041 fillet in-place: rc 0");
+    cc_object_stats(i.s, "b", &vol, &area, bb, &f, &e);
+    check(near(vol, 975.587, 1e-3) && f == 26,
+          "v041 fillet in-place: b now holds the filleted shape");
+  }
+  {
+    auto membrane = [](Session& i, const char* name, int axis, double val,
+                       double a0, double a1, double b0, double b1) {
+      CCViewData* vd = nullptr; int n = 0;
+      if (cc_view_data(i.s, name, 0.5, &vd, &n) != 0 || n != 1) return -1;
+      int hits = 0; const int A = (axis + 1) % 3, B = (axis + 2) % 3;
+      for (int t = 0; t < vd[0].triangleCount; ++t) {
+        double p[3][3];
+        for (int k = 0; k < 3; ++k) { int vi = vd[0].indices[t * 3 + k];
+          p[k][0] = vd[0].vertices[vi * 3]; p[k][1] = vd[0].vertices[vi * 3 + 1];
+          p[k][2] = vd[0].vertices[vi * 3 + 2]; }
+        if (std::fabs(p[0][axis] - val) < 1e-6 &&
+            std::fabs(p[1][axis] - val) < 1e-6 &&
+            std::fabs(p[2][axis] - val) < 1e-6) {
+          double ca = (p[0][A] + p[1][A] + p[2][A]) / 3.0;
+          double cb = (p[0][B] + p[1][B] + p[2][B]) / 3.0;
+          if (ca > a0 && ca < a1 && cb > b0 && cb < b1) ++hits;
+        }
+      }
+      cc_free_view_data(vd, n);
+      return hits;
+    };
+    struct FlushCase { const char* cutter; int axis; double plane; const char* label; };
+    const FlushCase cases[] = {
+      {"box c 4 4 4 at 3,3,6", 2, 10.0, "+z"},
+      {"box c 4 4 4 at 3,3,0", 2, 0.0, "-z"},
+      {"box c 4 4 4 at 6,3,3", 0, 10.0, "+x"},
+      {"box c 4 4 4 at 0,3,3", 0, 0.0, "-x"},
+      {"box c 4 4 4 at 3,6,3", 1, 10.0, "+y"},
+      {"box c 4 4 4 at 3,0,3", 1, 0.0, "-y"},
+    };
+    for (const auto& fc : cases) {
+      Session i;
+      i.run("box t 10 10 10");
+      i.run(fc.cutter);
+      std::string tag = std::string("v041 flush cut ") + fc.label;
+      check(i.run("cut r t c") == 0, tag + ": rc 0");
+      double vol, area, bb[6]; int f, e;
+      cc_object_stats(i.s, "r", &vol, &area, bb, &f, &e);
+      check(near(vol, 936.0, 1e-6), tag + ": volume == 936");
+      check(f == 11, tag + ": 11 faces (open pocket, no membrane face)");
+      check(membrane(i, "r", fc.axis, fc.plane, 3, 7, 3, 7) == 0,
+            tag + ": no membrane triangles in the shared plane");
+    }
+    { Session i;
+      i.run("box t 10 10 10"); i.run("box c0 4 4 4");
+      i.run("translate c c0 3 3 6");
+      check(i.run("cut r t c") == 0, "v041 flush cut (translated tool): rc 0");
+      check(membrane(i, "r", 2, 10.0, 3, 7, 3, 7) == 0,
+            "v041 flush cut (translated tool): no membrane triangles");
+    }
+    { Session i;
+      i.run("box t 10 10 10"); i.run("box c 10 10 4 at 0,0,6");
+      check(i.run("cut r t c") == 0, "v041 slab cut: rc 0");
+      check(near(i.volume("r"), 600.0, 1e-6), "v041 slab cut: volume == 600");
+    }
+    { Session i;
+      i.run("box t 10 10 10"); i.run("box c 4 4 10 at 3,3,0");
+      check(i.run("cut r t c") == 0, "v041 through cut: rc 0");
+      check(near(i.volume("r"), 840.0, 1e-6), "v041 through cut: volume == 840");
+      check(membrane(i, "r", 2, 10.0, 3, 7, 3, 7) == 0 &&
+            membrane(i, "r", 2, 0.0, 3, 7, 3, 7) == 0,
+            "v041 through cut: no membrane at either end");
+    }
+  }
+
   // ---- transforms ----------------------------------------------------
   std::printf("== translate / rotate ==\n");
   { Session i;
