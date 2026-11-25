@@ -46,6 +46,24 @@ public struct ModelStep: Codable, Identifiable, Equatable {
 
     public var isScript: Bool { command == "script" }
 
+    /// Qualified names of the session OBJECTS this step consumes
+    /// as operands (objectRef parameters only — profileRef
+    /// parameters point at profiles, which are not scene objects).
+    /// The app hides consumed sources in the viewer once a step
+    /// has run (v0.4.1): a derived solid — a fillet, a shell, a
+    /// cut result — sits inside or exactly on its source, so a
+    /// source left visible renders the result invisible (a
+    /// filleted cube reads as a plain sharp cube; a flush cut
+    /// reads as the full box with the tool's end face sealing
+    /// the hole). The user can re-show any source with the part
+    /// tree's eye toggle, and that choice sticks.
+    public var consumedObjectNames: [String] {
+        guard let spec = CommandCatalog.spec(for: command) else { return [] }
+        return spec.params.filter { $0.type == .objectRef }
+            .compactMap { params[$0.key]?.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
     /// One-line label for the History list: "Cut 'part'".
     public var displayTitle: String {
         if isScript { return "Imported script" }
@@ -145,7 +163,13 @@ public enum StepLineBuilder {
             let sizeKey = step.command == "fillet" ? "radius" : "distance"
             guard let src = ref("source"), let size = num(sizeKey) else { return nil }
             var line = "\(step.command) \(name) \(src) \(size)"
-            let edges = (p["edges"] ?? "").trimmingCharacters(in: .whitespaces)
+            // The interpreter's edge list is ONE comma-joined
+            // token; whitespace the user typed into the form
+            // field ("0, 1, 2") would split it into several
+            // tokens and the line would fail arity. Strip all
+            // whitespace here (v0.4.1) — the list grammar has no
+            // meaningful spaces.
+            let edges = (p["edges"] ?? "").filter { !$0.isWhitespace }
             if !edges.isEmpty { line += " edges \(edges)" }
             return line
         case "translate":
