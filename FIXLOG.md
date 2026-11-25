@@ -1267,3 +1267,73 @@ engine OCCT 184/184, engine mock 151 pass + 9 named skips, sim
 verified from the downloaded artifact (0.4.0 (10), file sharing
 on, 252-command catalog bundled); Mac app rebuilt from the same
 code at 0.4.0 (10), gate green, Intel job green.
+
+## v0.4.1 — the "commands failed" audit: sources now hide (2026-11-24)
+
+Device report on v0.4.0: "a few commands failed to work." Two
+concrete repros: (1) "I made a cube but when I tried filleting
+it went through but nothing showed up" — clarified: the part was
+there, it just didn't show the fillet; (2) a cut whose tool sits
+on the same axis plane as the target "still shows a full box
+but a thin barrier between the outside and the cut hole."
+
+Full audit, all paths, real mc backend (the pinned cascade-ios
+façade is byte-identical to the audited copy; its OCCT is 8.0.1,
+the version the audit bench links):
+
+- Fillet, split with hard numbers (box 10×10×10, radius 1, every
+  path — console in-place, console new-name, panel form blank
+  edges, panel form explicit edges): volume 975.587 (NOT the
+  cube's 1000), 26 faces, 56 edges, mesh 628 triangles vs the
+  cube's 12. The fillet APPLIES everywhere; the geometry was
+  never wrong.
+- Flush cuts, convicted or cleared by more than volume: six
+  axis/direction variants + translated tool + full-slab +
+  through cut — volumes exact (936 / 600 / 840), face census
+  exact (11 for the open pocket), ZERO membrane triangles in
+  the shared plane inside the tool footprint, flush union and
+  intersect likewise exact. The OCCT boolean leaves NO barrier.
+- Console matrix re-run: no regression. UI strings for all 21
+  panel commands (production StepLineBuilder output, defaults
+  and variants): all accepted, geometry correct. Undo/redo,
+  rename, per-part export (app's exact string form; real STEP
+  with ISO header + real STL written), the sim statics form's
+  lines verbatim × all 10 materials with qualified names:
+  pass. Replay equivalence: a 25-object project using every
+  panel command replays into a fresh session with identical
+  volumes; mixed namespaces (same display name in three
+  directories) coexist and resolve.
+
+THE MECHANISM (both repros, one cause): the app never hid a
+step's source objects. A fillet result sits INSIDE its box; a
+cut result sits inside its target while the flush tool's end
+face lies exactly in the target's face plane. With the sources
+still rendered, the scene shows the sharp cube (repro 1) and
+the full box with the tool's end face reading as a thin
+barrier sealing the hole (repro 2 — the flush case is exactly
+where the tool's face masquerades as a membrane; a protruding
+tool reads as a peg, an interior tool is invisible). The
+commands worked; their results were hidden inside their
+inputs.
+
+FIX (app layer, where the fault is): a step now hides the
+objects it consumes. ModelStep.consumedObjectNames (objectRef
+params only; profiles are not scene objects) feeds AppState's
+autoHiddenSources: applied on panel Add, recomputed on every
+replay (edit/delete/load), applied in refreshScene to the
+synced object list. The part tree's eye toggle re-shows any
+source; that choice is recorded (userShownSources) and
+survives replays. Console semantics unchanged — the console
+has the in-place `... as <same name>` form for replacement.
+Also: StepLineBuilder strips whitespace from the fillet/
+chamfer edge list, so "0, 1, 2" typed into the form builds
+the one-token list the grammar wants instead of failing arity.
+
+REGRESSIONS: mc matrix +39 checks (fillet volume/face/mesh
+pins for new-name AND in-place forms; flush-cut census +
+membrane tests on all axes, translated tool, slab, through
+cut) and Swift harness +4 (consumed-source sets for
+fillet/cut/extrude; edge-list normalisation). No façade or
+interpreter change: no fuzzy boolean — the backend was
+proven clean, and geometry the user typed is never moved or
+grown to make a render look right.
