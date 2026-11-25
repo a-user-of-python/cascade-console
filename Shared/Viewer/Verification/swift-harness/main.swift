@@ -702,6 +702,31 @@ if CommandLine.arguments.count > 2 {
           v4Built[1].line == "revolve rv profile:tube 360",
           "replay builder: revolve step predicts revolve:rv with the emitted line")
 
+    // v0.4.1 audit regressions: the consumed-source set the app
+    // uses to hide a step's sources in the viewer (a fillet's box,
+    // a cut's target + tool), and the edge-list whitespace
+    // normalisation in the line builder.
+    let filletStep = ModelStep(command: "fillet",
+                               params: ["source": "box:b", "radius": "1", "edges": ""],
+                               name: "f")
+    check(filletStep.consumedObjectNames == ["box:b"],
+          "consumed sources: fillet consumes its source object")
+    let cutStep = ModelStep(command: "cut",
+                            params: ["a": "box:t", "b": "box:c"], name: "r")
+    check(cutStep.consumedObjectNames == ["box:t", "box:c"],
+          "consumed sources: cut consumes target AND tool")
+    let extrudeStep = ModelStep(command: "extrude",
+                                params: ["profile": "profile:sq", "distance": "10"],
+                                name: "e")
+    check(extrudeStep.consumedObjectNames.isEmpty,
+          "consumed sources: extrude consumes no OBJECT (profileRefs are not scene objects)")
+    let spacedEdges = ModelStep(command: "fillet",
+                                params: ["source": "box:b", "radius": "1",
+                                         "edges": "0, 1, 2"], name: "f")
+    check(StepLineBuilder.line(for: spacedEdges, resultDisplayName: "f") ==
+          "fillet f box:b 1 edges 0,1,2",
+          "line builder: edge list typed with spaces is normalised to one token")
+
     // ProjectFile: Codable round-trip with steps, folders, viewer.
     var project = ProjectFile()
     project.steps = nsSteps
