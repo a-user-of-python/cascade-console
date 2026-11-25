@@ -1349,3 +1349,137 @@ Mac zip verified from download: app 0.4.1 (11), fat header
 0xcafebabe, x86_64 + arm64 slices, _cc_execute /
 _cc_session_create / _mc_clone_shape / _mc_export_stl present
 in BOTH slices, 28,346,115 B, md5 e5c2b2c1….
+
+## v0.4.2 — delete/re-add audit, tessellation quality, sidebar title (2026-11-24/25)
+
+Three device reports on v0.4.1: (1) "If I delete a fillet and
+try again on that edge it fails — check all actions like that";
+(2) "make fillets/spheres higher poly, they are really low
+right now"; (3) a screenshot: the giant bold "Cascade Console"
+title renders across the top of the LEFT sidebar, overlapping
+the part tree, and the "Properties" tab truncates to
+"Properti…".
+
+### (1) Delete / re-add: NOT REPRODUCED — no fix shipped
+
+The lead sequence (box → fillet one explicit edge → DELETE
+the fillet step → add the same fillet on the same edge again)
+was executed at every level the failure could live at, and it
+passes at all of them:
+
+- Interpreter level, real mc backend: a new permanent
+  sequence matrix (Core/native/tests/test_sequences_mc.cpp,
+  36 checks) — delete + identical re-create for all 21 derived
+  step cases (fillet edges/all, chamfer edges/all, shell,
+  translate, rotate, rotate-about, mirror, mirror-offset,
+  pattern linear/circular, copy, extrude, revolve, loft,
+  loft-ruled, sweep, union, cut, intersect) and the 6
+  primitives; delete-last and delete-middle then re-add at the
+  end; delete a SOURCE step with a dependent (replay fails
+  cleanly, names the step, the live model is untouched, the
+  project still replays afterwards); edit-after-delete equals
+  a fresh build; undo/redo interleaved with delete/re-add;
+  the lead repro with a user-typed name. 36/36.
+- App level, production code path: a new Swift harness
+  section drives the PRODUCTION AppState object (the exact
+  object the views drive) on a real NativeEngine: box → fillet
+  edge 3 (volume 997.854) → auto-hide set == [box:box1] →
+  save → delete fillet (replay clean, consumed set recomputed
+  empty, session back to the bare box) → re-add the identical
+  fillet (succeeds, volume identical) → reload the saved
+  project (replays clean, geometry identical) → box2 + cut
+  (936) → delete cut → re-add (936) → delete the middle fillet
+  → edit the box wider → cut rebuilds at 1936. All pass.
+- The four named suspects were checked individually: replay
+  after delete DOES rebuild into a fresh session
+  (replayProject replays into a scratch engine and adopts it
+  only on full success — the re-added fillet lands on the
+  sharp-edged box, whose edge census is the original one);
+  no stale name claims (assigned names are re-learned from
+  the session diff on every replay); the auto-hide sets are
+  recomputed from the surviving steps on every replay; the
+  stored edge list is interpreted against the rebuilt object.
+
+Two bugs WERE found and fixed — both in the new harness
+itself, not the app: the section's first CI run deadlocked
+because it waited on a semaphore from the main thread while
+the @MainActor work it awaited can only run ON the main
+thread (now: the harness spins the main runloop, with a
+300 s deadline and a 25-minute step timeout); and its first
+execution read view data through a provider captured before
+the delete — replay ADOPTS a fresh engine, so those reads hit
+the abandoned session (now: the provider is looked up from
+the current engine per query, exactly as refreshScene does).
+Both are recorded here because a gate that lies is worse than
+no gate; the corrected gate is the one whose numbers appear
+below. v0.4.2 contains NO delete/re-add fix: nothing failed
+to fix. The device retest is the verdict — if it still fails
+on device, the failing step's exact form values are the next
+evidence needed.
+
+### (2) Tessellation: the façade's angular cap was the ceiling
+
+Root cause: the pinned façade's mc_tessellate hardcodes a
+0.5 rad angular deflection. Measured on OCCT 8.0.1 through
+the production view-data path, the filleted 10 mm cube
+produced 628 triangles at EVERY linear deflection from
+0.5 mm down to 0.05 mm — finer linear settings changed
+nothing; the angle was the whole story (sphere r=10: 306
+triangles).
+
+Fix: a new CI-injected façade function mc_tessellate_ex
+(angle-parameterized; body identical to the pinned
+mc_tessellate apart from the signature, the angle, and error
+labels) via the rewritten patch_cascade_port.py (idempotent,
+upgrades the old patch in place; all kit cache keys include
+the patch hash). One policy, shared by tessellation,
+face-range slicing, and STL export (mc_export_stl upgraded
+to the same policy — exported STLs inherit the finer mesh):
+linear deflection = clamp(0.004 × bbox diagonal, 0.02, 0.5)
+mm, applied as an upper bound so a caller's finer request
+still wins; angular deflection 0.20 rad. Size-aware by
+construction: the linear term scales with the part, the
+angular term bounds facet flatness on curves of any radius.
+
+Before → after (production path, OCCT 8.0.1): plain box
+12 → 12 triangles (flat stays flat); sphere r=10 306 → 2022
+(also r=2 and r=50: 2022); cylinder r=5 h=12 100 → 248;
+cone 152 → 568; torus 10/3 1352 → 7938; fillet cube r=1
+628 → 2804. Mesh times on the slow sandbox core: torus
+107.9 ms (worst standard case), fillet cube 38.9 ms,
+spheres ~14 ms — no part takes seconds. Sphere STL export:
+exactly 2022 facets. The matrix pins floors at ~70% of
+measured (sphere ≥1500, fillet ≥2000, torus ≥4000, cylinder
+≥180, cone ≥250, box ==12, STL facets ≥1500) so a future
+façade bump cannot silently coarsen the mesh again.
+
+### (3) Sidebar title
+
+The sidebar's navigation title used the default large
+display style, which renders the title INTO the content
+area at title size — across the fixed 300 pt sidebar and
+over the part tree. ContentView's regular layout now uses
+the inline title display mode on iOS: a compact single-line
+header that truncates instead of overflowing. The left
+panel's segmented "Properties" tab (truncating to
+"Properti…" at sidebar width) is relabelled "Props". No
+panel redesign. The harness cannot screenshot; the visual
+verdict is the user's.
+
+Also fixed en route: the Mac workflow's gate still asserted
+version 0.4.1 (11) after the bump and failed the first
+v0.4.2 Mac build on that alone; the assertion now expects
+0.4.2 (12).
+
+Gates (full stack once, shipping commit ecc480a3): mc matrix
+255/255 (237 + 18 tessellation), mc sequence matrix 36/36,
+Swift harness 181/181 (158 + 23 AppState sequence checks),
+view-data smoke 35/35, engine OCCT 184/184, engine mock 151
+pass + 9 named skips, sim 45/45, prototype 47/47, host tests
+green, Intel engine job green. IPA verified from the
+downloaded artifact: com.user.cascadeconsole, 0.4.2 (12),
+both file-sharing keys true, 10,262,940 B, md5 1127237b….
+Mac zip verified from download: app 0.4.2 (12), fat header
+0xcafebabe, x86_64 + arm64 slices, _cc_execute /
+_cc_session_create / _mc_clone_shape / _mc_export_stl present
+in BOTH slices, 28,353,401 B, md5 7a110cb6….
