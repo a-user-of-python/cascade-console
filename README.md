@@ -36,6 +36,14 @@ specified in `docs/EXTRAS.md`, with host-prototype numbers in
 
 ## Honest status
 
+**v0.4.1 (2026-11-24): the "commands failed" audit** — a device
+report ("fillet went through but nothing showed up"; a flush cut
+"still shows a full box with a thin barrier") was traced through
+every path on the real backend: the geometry was always correct
+(fillet volume/face/mesh pins and flush-cut membrane tests now
+live in the matrix), but a step's source objects stayed visible
+around its result, hiding it. Steps now hide the objects they
+consume (the part tree's eye toggle re-shows any source).
 **v0.4.0 (2026-11-24): command expansion batch 1** — `revolve`,
 `loft`, `sweep`, `shell`, `mirror`, and `pattern` (linear +
 circular) implemented in the interpreter over both backends, each
