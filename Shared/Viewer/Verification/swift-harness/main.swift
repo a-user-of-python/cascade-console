@@ -933,13 +933,24 @@ func waitIdle(_ state: AppState, _ what: String) async -> Bool {
 func appStateSequences() async {
     let state = AppState(engine: NativeEngine(), viewer: nil,
                          fileStore: FileStore())
-    let provider = state.engine as? EngineViewDataProviding
-    check(provider != nil, "appstate: the harness engine provides view data")
-    guard let provider else { return }
-
-    func names() async -> [String] { await provider.objectNames() }
+    check(state.engine is EngineViewDataProviding,
+          "appstate: the harness engine provides view data")
+    // The provider is looked up FRESH for every read, never captured:
+    // replayProject ADOPTS the scratch engine on success
+    // (`engine = scratch`), so a captured provider keeps querying
+    // the abandoned pre-replay session — the first CI run of this
+    // section failed exactly that way (post-delete reads saw the
+    // deleted fillet's session; post-swap adds were invisible).
+    // refreshScene reads state.engine fresh each time; so does this.
+    func names() async -> [String] {
+        guard let p = state.engine as? EngineViewDataProviding
+        else { return [] }
+        return await p.objectNames()
+    }
     func volume(of name: String) async -> Double {
-        let feed = await provider.viewData(name: name)
+        guard let p = state.engine as? EngineViewDataProviding
+        else { return -1 }
+        let feed = await p.viewData(name: name)
         return feed.objects.first?.volume ?? -1
     }
     func specParams(_ id: String, _ overrides: [String: String]) -> [String: String] {
