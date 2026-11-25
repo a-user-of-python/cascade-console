@@ -239,6 +239,7 @@ jobs:
       # returns early; the assertions read the session through the
       # engine's own view-data queries.
       - name: Build + run Swift viewer harness (production parser + layout contract)
+        timeout-minutes: 25
         run: |
           xcrun swiftc -O \
             -D CASCADE_NATIVE_ENGINE \

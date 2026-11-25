@@ -1049,12 +1049,28 @@ func appStateSequences() async {
     }
 }
 
-let appStateGate = DispatchSemaphore(value: 0)
+// Drive the @MainActor section by SPINNING the main runloop: the
+// main actor's executor is the main dispatch queue, which only the
+// main thread can service. Blocking this thread on a semaphore
+// instead deadlocks the harness — the task can never start, the
+// semaphore never signals (v0.4.2's first CI run hung exactly here
+// until cancelled). The spin has a hard deadline so a wedged
+// sequence fails the gate in minutes instead of hanging the job.
+var appStateDone = false
 Task { @MainActor in
     await appStateSequences()
-    appStateGate.signal()
+    appStateDone = true
 }
-appStateGate.wait()
+let appStateDeadline = Date(timeIntervalSinceNow: 300)
+while !appStateDone {
+    if Date() > appStateDeadline {
+        print("FAIL appstate: sequence section exceeded its 300 s deadline")
+        print("RESULT: \(passCount) pass, \(failCount + 1) fail (swift viewer harness)")
+        exit(1)
+    }
+    RunLoop.main.run(mode: .default,
+                     before: Date(timeIntervalSinceNow: 0.05))
+}
 
 print("RESULT: \(passCount) pass, \(failCount) fail (swift viewer harness)")
 exit(failCount == 0 ? 0 : 1)
